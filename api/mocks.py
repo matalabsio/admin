@@ -20,8 +20,13 @@ from app.admin.schemas import (
     PatchMockStatusRequest,
     SectionStatus,
 )
+from app.cache.hybrid_cache import delete_many
 from app.db.supabase_client import execute_with_retry, get_supabase
 from app.mock_catalog.catalog import live_parts_tuple, next_catalog_number
+
+
+def _invalidate_picker_catalog() -> None:
+    delete_many(["mock_catalog:v2:pub", "mock_catalog:v2:all"])
 
 
 def _exec(query, *, retries: int = 3):
@@ -472,6 +477,7 @@ def create_mock(*, body: CreateMockRequest, admin_id: UUID) -> AdminMockDetail:
         metadata={"title": body.title, "catalog_number": catalog_number},
     )
 
+    _invalidate_picker_catalog()
     return get_mock_detail(UUID(mock_id))
 
 
@@ -511,6 +517,7 @@ def patch_mock(
         metadata=updates,
     )
 
+    _invalidate_picker_catalog()
     return get_mock_detail(mock_id)
 
 
@@ -548,6 +555,7 @@ def patch_mock_status(
         metadata={"status": body.status},
     )
 
+    _invalidate_picker_catalog()
     return get_mock_detail(mock_id)
 
 
@@ -624,4 +632,5 @@ def delete_mock(*, mock_id: UUID, admin_id: UUID) -> DeleteMockResponse:
         metadata={"title": row.get("title"), "status": status_val},
     )
 
+    _invalidate_picker_catalog()
     return DeleteMockResponse(ok=True, deleted_id=mock_id)
