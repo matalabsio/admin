@@ -1,35 +1,31 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { AdminPageHeader } from "@/components/admin/admin-page-header";
-import { AdminMockIngestClient } from "@/components/admin/admin-mock-ingest-client";
-import { AdminShell } from "@/components/admin/admin-shell";
-import { adminBtnSecondary, adminLink } from "@/components/admin/admin-ui";
+import { redirect } from "next/navigation";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ module?: string; part?: string }>;
+};
 
 export const metadata: Metadata = {
   title: "Ingest · Admin · BandForge",
   robots: { index: false, follow: false },
 };
 
-export default async function AdminMockIngestPage({ params }: Props) {
+export default async function AdminMockIngestPage({ params, searchParams }: Props) {
   const { id } = await params;
-  return (
-    <AdminShell hidePageHeader>
-      <AdminPageHeader
-        eyebrow="Content / Ingest"
-        title="Content ingest"
-        subtitle="Upload and validate section content before publishing."
-        actions={
-          <Link href={`/admin/mocks/${id}`} className={adminBtnSecondary}>
-            Back to mock
-          </Link>
-        }
-      />
-      <Link href="/admin/mocks" className={`mb-4 mt-4 inline-block text-sm ${adminLink}`}>
-        ← Back to mocks
-      </Link>
-      <AdminMockIngestClient mockId={id} />
-    </AdminShell>
-  );
+  const query = await searchParams;
+  const partRaw = Number(query.part || "1");
+  const part = Number.isFinite(partRaw) && partRaw >= 1 && partRaw <= 4 ? partRaw : 1;
+  const module = query.module?.trim();
+
+  if (module === "reading") {
+    redirect(`/admin/mocks/${id}/reading/${part}`);
+  }
+  if (module === "writing") {
+    const writingPart = part === 2 ? 2 : 1;
+    redirect(`/admin/mocks/${id}/writing/${writingPart}`);
+  }
+
+  // Listening now uses only the visual builder flow.
+  redirect(`/admin/mocks/${id}/listening/${part}`);
 }

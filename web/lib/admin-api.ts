@@ -590,6 +590,97 @@ export type AiHealthResponse = {
   speaking_failed: number;
 };
 
+export type ReadingBuilderQuestionIn = {
+  question_type: string;
+  prompt: string;
+  options?: Array<{ label: string; text: string }> | null;
+  correct_answer: string;
+  alt_answers: string[];
+  skill_tag?: string | null;
+};
+
+export type ReadingBuilderQuestionOut = {
+  id: string;
+  question_number: number;
+  question_type: string;
+  prompt: string;
+  passage_text?: string | null;
+  options?: Array<{ label: string; text: string }> | null;
+  correct_answer: string;
+  alt_answers: string[];
+  skill_tag?: string | null;
+};
+
+export type ReadingPassageResponse = {
+  mock_test_id: string;
+  part: number;
+  passage_text: string | null;
+  questions: ReadingBuilderQuestionOut[];
+};
+
+export type ListeningBuilderQuestionIn = {
+  question_type: string;
+  prompt: string;
+  options?: Array<{ label: string; text: string }> | null;
+  correct_answer: string;
+  alt_answers: string[];
+  skill_tag?: string | null;
+  instructions?: string | null;
+  choose_two?: boolean;
+};
+
+export type ListeningBuilderQuestionOut = {
+  id: string;
+  question_number: number;
+  question_type: string;
+  prompt: string;
+  instructions?: string | null;
+  options?: Array<{ label: string; text: string }> | null;
+  correct_answer: string;
+  alt_answers: string[];
+  skill_tag?: string | null;
+  choose_two?: boolean;
+};
+
+export type ListeningPartResponse = {
+  mock_test_id: string;
+  part: number;
+  audio_key: string | null;
+  instructions: string | null;
+  questions: ListeningBuilderQuestionOut[];
+};
+
+export type WritingPartResponse = {
+  mock_test_id: string;
+  part: number;
+  question_id: string | null;
+  question_type: string;
+  prompt: string;
+  options: Record<string, unknown>;
+  image_url: string | null;
+  image_preview_url: string | null;
+  image_name: string | null;
+};
+
+export type SpeakingBuilderQuestion = {
+  id?: string;
+  question_number?: number;
+  prompt: string;
+  speak_time_sec: number;
+  min_skip_sec: number;
+  prep_sec: number;
+  record_sec: number;
+  video_url: string | null;
+  video_preview_url?: string | null;
+  video_name?: string | null;
+};
+
+export type SpeakingPartResponse = {
+  mock_test_id: string;
+  part: number;
+  questions: SpeakingBuilderQuestion[];
+};
+
 export const adminApi = {
   metrics() {
     return adminCall<DashboardMetrics>("/dashboard/metrics");
@@ -687,6 +778,12 @@ export const adminApi = {
     });
   },
 
+  deleteMock(id: string) {
+    return adminCall<{ ok: boolean; deleted_id: string }>(`/mocks/${id}`, {
+      method: "DELETE",
+    });
+  },
+
   validateIngest(
     mockId: string,
     body: {
@@ -735,6 +832,181 @@ export const adminApi = {
     return adminCall(`/mocks/${mockId}/ingest/publish`, {
       method: "POST",
       body: JSON.stringify(body),
+    });
+  },
+
+  loadReadingPassage(mockId: string, part: number) {
+    return adminCall<ReadingPassageResponse>(
+      `/mocks/${mockId}/reading/${part}`,
+    );
+  },
+
+  saveReadingPassage(
+    mockId: string,
+    part: number,
+    body: {
+      passage_text: string;
+      questions: ReadingBuilderQuestionIn[];
+    },
+  ) {
+    return adminCall<{ ok: boolean; questions_written: number; part: number }>(
+      `/mocks/${mockId}/reading/${part}/save`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+
+  loadListeningPart(mockId: string, part: number) {
+    return adminCall<ListeningPartResponse>(
+      `/mocks/${mockId}/listening/${part}`,
+    );
+  },
+
+  saveListeningPart(
+    mockId: string,
+    part: number,
+    body: {
+      audio_key: string;
+      instructions?: string | null;
+      questions: ListeningBuilderQuestionIn[];
+    },
+  ) {
+    return adminCall<{
+      ok: boolean;
+      questions_written: number;
+      part: number;
+      audio_key: string;
+    }>(`/mocks/${mockId}/listening/${part}/save`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  loadWritingPart(mockId: string, part: number) {
+    return adminCall<WritingPartResponse>(`/mocks/${mockId}/writing/${part}`);
+  },
+
+  saveWritingPart(
+    mockId: string,
+    part: number,
+    body: {
+      prompt: string;
+      question_type?: string | null;
+      options?: Record<string, unknown> | null;
+      image_url?: string | null;
+    },
+  ) {
+    return adminCall<{
+      ok: boolean;
+      part: number;
+      question_type: string;
+      image_url: string | null;
+    }>(`/mocks/${mockId}/writing/${part}/save`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  uploadWritingImage(mockId: string, part: number, file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return adminMultipartCall<{
+      ok: boolean;
+      image_url: string;
+      image_preview_url: string | null;
+      image_name: string;
+    }>(`/mocks/${mockId}/writing/${part}/image`, formData);
+  },
+
+  loadSpeakingPart(mockId: string, part: number) {
+    return adminCall<SpeakingPartResponse>(`/mocks/${mockId}/speaking/${part}`);
+  },
+
+  saveSpeakingPart(
+    mockId: string,
+    part: number,
+    body: {
+      questions: Array<{
+        prompt: string;
+        speak_time_sec?: number | null;
+        min_skip_sec?: number | null;
+        prep_sec?: number | null;
+        record_sec?: number | null;
+        video_url?: string | null;
+      }>;
+    },
+  ) {
+    return adminCall<{
+      ok: boolean;
+      questions_written: number;
+      part: number;
+    }>(`/mocks/${mockId}/speaking/${part}/save`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  uploadSpeakingVideo(mockId: string, part: number, file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return adminMultipartCall<{
+      ok: boolean;
+      video_url: string;
+      video_preview_url: string | null;
+      video_name: string;
+      size_bytes: number;
+      part: number;
+    }>(`/mocks/${mockId}/speaking/${part}/video`, formData);
+  },
+
+  checkSpeakingVideo(mockId: string, part: number, key: string) {
+    const q = new URLSearchParams({ key });
+    return adminCall<{
+      video_url: string;
+      exists_in_r2: boolean;
+      playable?: boolean;
+      size_bytes?: number | null;
+      part: number;
+    }>(`/mocks/${mockId}/speaking/${part}/video?${q}`);
+  },
+
+  createQuestion(body: {
+    mock_test_id: string;
+    module: string;
+    part: number;
+    question_type: string;
+    question_number: number;
+    prompt: string;
+    passage_text?: string;
+    options?: Array<{ label: string; text: string }>;
+    correct_answer?: string;
+    skill_tag?: string;
+  }) {
+    return adminCall<{ id: string; question_number: number; question_type: string; prompt: string }>(
+      "/questions",
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+
+  updateQuestion(
+    id: string,
+    body: {
+      question_type?: string;
+      prompt?: string;
+      options?: Array<{ label: string; text: string }> | null;
+      correct_answer?: string;
+      alt_answers?: string[];
+      skill_tag?: string | null;
+    },
+  ) {
+    return adminCall<{ id: string; question_number: number; question_type: string; prompt: string }>(
+      `/questions/${id}`,
+      { method: "PUT", body: JSON.stringify(body) },
+    );
+  },
+
+  deleteQuestion(id: string) {
+    return adminCall<{ ok: boolean; deleted_id: string }>(`/questions/${id}`, {
+      method: "DELETE",
     });
   },
 

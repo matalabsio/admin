@@ -1,6 +1,7 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   adminBtnPrimary,
@@ -24,12 +25,28 @@ function formatFileSize(bytes: number): string {
 }
 
 function IngestForm({ mockId }: Props) {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const initialModule = searchParams.get("module") === "listening" ? "listening" : "reading";
+  const requestedModule = searchParams.get("module");
   const initialPart = Number(searchParams.get("part") || "1");
+  const safePart =
+    Number.isFinite(initialPart) && initialPart >= 1 && initialPart <= 4
+      ? initialPart
+      : 1;
 
-  const [module, setModule] = useState<"reading" | "listening">(initialModule);
-  const [part, setPart] = useState(initialPart);
+  // Reading / Writing use visual builders — never the JSON ingest form
+  useEffect(() => {
+    if (requestedModule === "reading") {
+      router.replace(`/admin/mocks/${mockId}/reading/${safePart}`);
+    }
+    if (requestedModule === "writing") {
+      const writingPart = safePart === 2 ? 2 : 1;
+      router.replace(`/admin/mocks/${mockId}/writing/${writingPart}`);
+    }
+  }, [mockId, requestedModule, router, safePart]);
+
+  const [module] = useState<"listening">("listening");
+  const [part, setPart] = useState(safePart);
   const [jsonText, setJsonText] = useState("");
   const [audioKey, setAudioKey] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -79,6 +96,14 @@ function IngestForm({ mockId }: Props) {
     }, 200);
     return () => clearTimeout(timer);
   }, [module, refreshAudioStatus]);
+
+  if (requestedModule === "reading" || requestedModule === "writing") {
+    return (
+      <p className="text-sm text-[#5A6B82]">
+        Opening {requestedModule === "writing" ? "Writing" : "Reading"} builder…
+      </p>
+    );
+  }
 
   const parseJson = () => {
     try {
@@ -186,26 +211,29 @@ function IngestForm({ mockId }: Props) {
         <h2 className={cn(adminHeading, "text-xl")}>Content ingest</h2>
         <p className={adminSubtext}>Pick the module and section you want to ingest.</p>
         <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex items-center gap-2 text-sm font-medium text-black">
-          Module
-          <select
-            value={module}
-            onChange={(e) => setModule(e.target.value as "reading" | "listening")}
-            className="rounded-lg border border-border bg-white px-2 py-1 text-ink"
-          >
-            <option value="reading">Reading</option>
-            <option value="listening">Listening</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-2 text-sm font-medium text-black">
-          Part
+        <div>
+          <p className={adminMutedLabel}>Module</p>
+          <p className="mt-1 text-sm font-semibold text-navy">Listening</p>
+          <p className={cn(adminSubtext, "mt-1 text-xs")}>
+            Reading uses the{" "}
+            <Link
+              href={`/admin/mocks/${mockId}/reading/1`}
+              className={adminLink}
+            >
+              Reading builder
+            </Link>
+            .
+          </p>
+        </div>
+        <label className="block text-sm font-medium text-navy">
+          <span className={adminMutedLabel}>Part</span>
           <input
             type="number"
             min={1}
             max={4}
             value={part}
             onChange={(e) => setPart(Number(e.target.value))}
-            className="w-16 rounded-lg border border-border bg-white px-2 py-1 text-ink"
+            className={cn(adminInput, "mt-1 w-24")}
           />
         </label>
         </div>

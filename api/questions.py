@@ -236,6 +236,18 @@ def patch_question(
         updates["correct_answer"] = body.correct_answer
     if body.explanation is not None:
         updates["explanation"] = body.explanation
+    if body.question_type is not None:
+        from app.admin.question_types import to_slug
+
+        updates["question_type"] = to_slug(body.question_type)
+    if body.question_number is not None:
+        updates["question_number"] = body.question_number
+    if body.part is not None:
+        updates["part"] = body.part
+    if body.passage_text is not None:
+        updates["passage_text"] = body.passage_text
+    if body.skill_tag is not None:
+        updates["skill_tag"] = body.skill_tag
 
     effective_options = updates.get("options", row.get("options"))
     effective_answer = updates.get("correct_answer", row.get("correct_answer"))

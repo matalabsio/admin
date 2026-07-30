@@ -16,6 +16,10 @@ from app.admin import (
     mocks_ingest,
     payments as admin_payments,
     questions,
+    reading_builder,
+    listening_builder,
+    speaking_builder,
+    writing_builder,
     review_analytics as admin_review_analytics,
     speaking,
     users,
@@ -31,6 +35,12 @@ from app.admin.schemas import (
     AdminMockDetail,
     AdminMockListItem,
     CreateMockRequest,
+    CreateQuestionRequest,
+    CreateQuestionResponse,
+    DeleteMockResponse,
+    DeleteQuestionResponse,
+    UpdateQuestionRequest,
+    UpdateQuestionResponse,
     PatchMockRequest,
     AdminQuestionDetail,
     AdminUserDetail,
@@ -49,6 +59,18 @@ from app.admin.schemas import (
     IngestPublishResponse,
     IngestValidateRequest,
     IngestValidateResponse,
+    ReadingBuilderSaveRequest,
+    ReadingBuilderSaveResponse,
+    ReadingPassageResponse,
+    ListeningBuilderSaveRequest,
+    ListeningBuilderSaveResponse,
+    ListeningPartResponse,
+    WritingBuilderSaveRequest,
+    WritingBuilderSaveResponse,
+    WritingPartResponse,
+    SpeakingBuilderSaveRequest,
+    SpeakingBuilderSaveResponse,
+    SpeakingPartResponse,
     ReviewAnalyticsResponse,
     ReviewHistoryResponse,
     ReopenSpeakingReviewRequest,
@@ -189,6 +211,14 @@ def patch_mock_status_route(
     return mocks.patch_mock_status(mock_id=mock_id, body=body, admin_id=admin.id)
 
 
+@router.delete("/mocks/{mock_id}", response_model=DeleteMockResponse)
+def delete_mock_route(
+    mock_id: UUID,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> DeleteMockResponse:
+    return mocks.delete_mock(mock_id=mock_id, admin_id=admin.id)
+
+
 @router.post("/mocks/{mock_id}/ingest/validate", response_model=IngestValidateResponse)
 def validate_ingest_route(
     mock_id: UUID,
@@ -285,6 +315,347 @@ async def upload_audio_route(
         metadata={"part": part, "key": key},
     )
     return {"ok": True, "audio_key": key}
+
+
+@router.get("/mocks/{mock_id}/reading/{part}", response_model=ReadingPassageResponse)
+def load_reading_passage_route(
+    mock_id: UUID,
+    part: int,
+    _admin: Annotated[UserPublic, Depends(require_admin)],
+) -> ReadingPassageResponse:
+    return reading_builder.load_reading_passage(mock_id=mock_id, part=part)
+
+
+@router.post(
+    "/mocks/{mock_id}/reading/{part}/save",
+    response_model=ReadingBuilderSaveResponse,
+)
+def save_reading_passage_route(
+    mock_id: UUID,
+    part: int,
+    body: ReadingBuilderSaveRequest,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> ReadingBuilderSaveResponse:
+    return reading_builder.save_reading_passage(
+        mock_id=mock_id, part=part, body=body, admin_id=admin.id
+    )
+
+
+@router.get("/mocks/{mock_id}/listening/{part}", response_model=ListeningPartResponse)
+def load_listening_part_route(
+    mock_id: UUID,
+    part: int,
+    _admin: Annotated[UserPublic, Depends(require_admin)],
+) -> ListeningPartResponse:
+    return listening_builder.load_listening_part(mock_id=mock_id, part=part)
+
+
+@router.post(
+    "/mocks/{mock_id}/listening/{part}/save",
+    response_model=ListeningBuilderSaveResponse,
+)
+def save_listening_part_route(
+    mock_id: UUID,
+    part: int,
+    body: ListeningBuilderSaveRequest,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> ListeningBuilderSaveResponse:
+    return listening_builder.save_listening_part(
+        mock_id=mock_id, part=part, body=body, admin_id=admin.id
+    )
+
+
+ADMIN_WRITING_IMAGE_MAX_BYTES = 15 * 1024 * 1024
+_WRITING_IMAGE_TYPES = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+}
+
+
+@router.get("/mocks/{mock_id}/writing/{part}", response_model=WritingPartResponse)
+def load_writing_part_route(
+    mock_id: UUID,
+    part: int,
+    _admin: Annotated[UserPublic, Depends(require_admin)],
+) -> WritingPartResponse:
+    return writing_builder.load_writing_part(mock_id=mock_id, part=part)
+
+
+@router.post(
+    "/mocks/{mock_id}/writing/{part}/save",
+    response_model=WritingBuilderSaveResponse,
+)
+def save_writing_part_route(
+    mock_id: UUID,
+    part: int,
+    body: WritingBuilderSaveRequest,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> WritingBuilderSaveResponse:
+    return writing_builder.save_writing_part(
+        mock_id=mock_id, part=part, body=body, admin_id=admin.id
+    )
+
+
+@router.post("/mocks/{mock_id}/writing/{part}/image")
+async def upload_writing_image_route(
+    request: Request,
+    mock_id: UUID,
+    part: int,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+    file: UploadFile = File(...),
+):
+    if part != 1:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Image upload is only supported for Writing Task 1.",
+        )
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > ADMIN_WRITING_IMAGE_MAX_BYTES:
+                raise HTTPException(
+                    status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Image file is too large.",
+                )
+        except ValueError:
+            pass
+    content = await file.read()
+    if len(content) > ADMIN_WRITING_IMAGE_MAX_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Image file is too large.",
+        )
+    if not content:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Empty image file.")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    ext = _WRITING_IMAGE_TYPES.get(content_type)
+    if not ext:
+        name = (file.filename or "").lower()
+        if name.endswith(".png"):
+            ext, content_type = "png", "image/png"
+        elif name.endswith(".webp"):
+            ext, content_type = "webp", "image/webp"
+        elif name.endswith(".gif"):
+            ext, content_type = "gif", "image/gif"
+        elif name.endswith(".jpg") or name.endswith(".jpeg"):
+            ext, content_type = "jpg", "image/jpeg"
+        else:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported image type. Use JPEG, PNG, WebP, or GIF.",
+            )
+
+    key = f"writing/{mock_id}/task-{part}/figure.{ext}"
+    try:
+        upload_object(key=key, body=content, content_type=content_type)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    from app.admin.audit import log_admin_action
+
+    log_admin_action(
+        admin_id=admin.id,
+        action="writing.image_upload",
+        resource_type="mock_test",
+        resource_id=mock_id,
+        metadata={"part": part, "key": key},
+    )
+
+    preview_url = None
+    try:
+        from app.storage.r2 import generate_signed_url
+
+        preview_url = generate_signed_url(key)
+    except Exception:
+        preview_url = None
+
+    return {
+        "ok": True,
+        "image_url": key,
+        "image_preview_url": preview_url,
+        "image_name": key.split("/")[-1],
+    }
+
+
+ADMIN_SPEAKING_VIDEO_MAX_BYTES = 40 * 1024 * 1024
+_SPEAKING_VIDEO_TYPES = {
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
+}
+
+
+@router.get("/mocks/{mock_id}/speaking/{part}", response_model=SpeakingPartResponse)
+def load_speaking_part_route(
+    mock_id: UUID,
+    part: int,
+    _admin: Annotated[UserPublic, Depends(require_admin)],
+) -> SpeakingPartResponse:
+    return speaking_builder.load_speaking_part(mock_id=mock_id, part=part)
+
+
+@router.post(
+    "/mocks/{mock_id}/speaking/{part}/save",
+    response_model=SpeakingBuilderSaveResponse,
+)
+def save_speaking_part_route(
+    mock_id: UUID,
+    part: int,
+    body: SpeakingBuilderSaveRequest,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> SpeakingBuilderSaveResponse:
+    return speaking_builder.save_speaking_part(
+        mock_id=mock_id, part=part, body=body, admin_id=admin.id
+    )
+
+
+@router.post("/mocks/{mock_id}/speaking/{part}/video")
+async def upload_speaking_video_route(
+    request: Request,
+    mock_id: UUID,
+    part: int,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+    file: UploadFile = File(...),
+):
+    if part < 1 or part > 3:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Part must be 1–3.")
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > ADMIN_SPEAKING_VIDEO_MAX_BYTES:
+                raise HTTPException(
+                    status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Video file is too large (max 40MB for 10–15s clips).",
+                )
+        except ValueError:
+            pass
+    content = await file.read()
+    if len(content) > ADMIN_SPEAKING_VIDEO_MAX_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Video file is too large (max 40MB for 10–15s clips).",
+        )
+    if not content:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Empty video file.")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    ext = _SPEAKING_VIDEO_TYPES.get(content_type)
+    if not ext:
+        name = (file.filename or "").lower()
+        if name.endswith(".mp4"):
+            ext, content_type = "mp4", "video/mp4"
+        elif name.endswith(".webm"):
+            ext, content_type = "webm", "video/webm"
+        elif name.endswith(".mov"):
+            ext, content_type = "mov", "video/quicktime"
+        else:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported video type. Use MP4, WebM, or MOV (10–15s).",
+            )
+
+    from uuid import uuid4
+
+    key = f"speaking/{mock_id}/part-{part}/{uuid4().hex}.{ext}"
+    try:
+        upload_object(key=key, body=content, content_type=content_type)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    from app.admin.audit import log_admin_action
+
+    log_admin_action(
+        admin_id=admin.id,
+        action="speaking.video_upload",
+        resource_type="mock_test",
+        resource_id=mock_id,
+        metadata={"part": part, "key": key, "size_bytes": len(content)},
+    )
+
+    preview_url = None
+    try:
+        from app.storage.r2 import generate_signed_url
+
+        preview_url = generate_signed_url(key)
+    except Exception:
+        preview_url = None
+
+    return {
+        "ok": True,
+        "video_url": key,
+        "video_preview_url": preview_url,
+        "video_name": key.split("/")[-1],
+        "size_bytes": len(content),
+        "part": part,
+    }
+
+
+@router.get("/mocks/{mock_id}/speaking/{part}/video")
+def check_speaking_video_route(
+    mock_id: UUID,
+    part: int,
+    _admin: Annotated[UserPublic, Depends(require_admin)],
+    key: str | None = Query(default=None),
+):
+    if part < 1 or part > 3:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Part must be 1–3.")
+    video_key = (key or "").strip()
+    if not video_key:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="key is required.")
+    expected_prefix = f"speaking/{mock_id}/part-{part}/"
+    if not video_key.startswith(expected_prefix) and not video_key.startswith(
+        f"speaking/{mock_id}/"
+    ):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Video key does not belong to this mock/part.",
+        )
+    meta = object_head(video_key)
+    exists = meta is not None
+    return {
+        "video_url": video_key,
+        "exists_in_r2": exists,
+        "playable": exists,
+        "size_bytes": int(meta["size"]) if meta and "size" in meta else None,
+        "part": part,
+    }
+
+
+@router.post("/questions", response_model=CreateQuestionResponse, status_code=201)
+def create_question_route(
+    body: CreateQuestionRequest,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> CreateQuestionResponse:
+    return reading_builder.create_question(body=body, admin_id=admin.id)
+
+
+@router.put("/questions/{question_id}", response_model=UpdateQuestionResponse)
+def update_question_route(
+    question_id: UUID,
+    body: UpdateQuestionRequest,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> UpdateQuestionResponse:
+    return reading_builder.update_question(
+        question_id=question_id, body=body, admin_id=admin.id
+    )
+
+
+@router.delete("/questions/{question_id}", response_model=DeleteQuestionResponse)
+def delete_question_route(
+    question_id: UUID,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> DeleteQuestionResponse:
+    return reading_builder.delete_question(question_id=question_id, admin_id=admin.id)
 
 
 @router.get("/mocks/{mock_id}/questions", response_model=QuestionTreeResponse)

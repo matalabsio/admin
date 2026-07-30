@@ -101,6 +101,23 @@ export function AdminMocksClient() {
     }
   };
 
+  const deleteMock = async (id: string, title: string) => {
+    const ok = window.confirm(
+      `Delete “${title}” permanently?\n\nThis removes the mock and all its listening/reading/writing questions. This cannot be undone.`,
+    );
+    if (!ok) return;
+    setBusyId(id);
+    setError(null);
+    try {
+      await adminApi.deleteMock(id);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   if (loading) return <p className="text-gray-600">Loading mocks…</p>;
 
   return (
@@ -117,9 +134,12 @@ export function AdminMocksClient() {
             <button
               type="button"
               onClick={() => setShowCreate((v) => !v)}
-              className={cn(adminBtnPrimary, "w-full sm:w-auto")}
+              className={cn(
+                showCreate ? adminBtnSecondary : adminBtnPrimary,
+                "w-full sm:w-auto",
+              )}
             >
-              {showCreate ? "Hide form" : "Create mock"}
+              {showCreate ? "Cancel" : "Create mock"}
             </button>
           </>
         }
@@ -182,6 +202,7 @@ export function AdminMocksClient() {
                 busyId={busyId}
                 onArchive={archiveMock}
                 onPublish={publishMock}
+                onDelete={deleteMock}
               />
             ))}
           </div>
@@ -206,6 +227,7 @@ export function AdminMocksClient() {
                 busyId={busyId}
                 onArchive={archiveMock}
                 onPublish={publishMock}
+                onDelete={deleteMock}
               />
             ))}
           </div>
@@ -227,6 +249,7 @@ export function AdminMocksClient() {
                 busyId={busyId}
                 onArchive={archiveMock}
                 onPublish={publishMock}
+                onDelete={deleteMock}
               />
             ))}
           </div>
@@ -241,13 +264,16 @@ function MockCard({
   busyId,
   onArchive,
   onPublish,
+  onDelete,
 }: {
   mock: AdminMockListItem;
   busyId: string | null;
   onArchive: (id: string) => void;
   onPublish: (id: string) => void;
+  onDelete: (id: string, title: string) => void;
 }) {
   const isLive = mock.status === "published";
+  const canDelete = mock.status === "draft" || mock.status === "archived";
   return (
     <article className={cn(adminCard, "flex flex-col gap-4 p-6")}>
       <div className="flex items-start justify-between gap-2">
@@ -282,22 +308,22 @@ function MockCard({
           href={`/admin/mocks/${mock.id}`}
           className={cn(adminBtnSecondary, "px-2 py-2 text-xs")}
         >
-          Details
+          Mock details
         </Link>
         <Link
-          href={`/admin/mocks/${mock.id}/ingest`}
+          href={`/admin/mocks/${mock.id}/listening/1`}
           className={cn(adminBtnSecondary, "px-2 py-2 text-xs")}
         >
-          Ingest
+          Edit/Add questions
         </Link>
         <Link
           href={`/admin/mocks/${mock.id}/questions`}
           className={cn(adminBtnSecondary, "px-2 py-2 text-xs")}
         >
-          Questions
+          Review questions
         </Link>
       </div>
-      <div className="border-t border-[#EDF1F6] pt-3">
+      <div className="flex flex-col gap-2 border-t border-[#EDF1F6] pt-3">
         {isLive ? (
           <button
             type="button"
@@ -317,6 +343,16 @@ function MockCard({
             Publish
           </button>
         )}
+        {canDelete ? (
+          <button
+            type="button"
+            disabled={busyId === mock.id}
+            onClick={() => void onDelete(mock.id, mock.title)}
+            className="w-full cursor-pointer rounded-[11px] border border-[#E4E9F0] bg-white px-3 py-2 text-xs font-semibold text-[#B42318] transition-colors hover:border-[#FBCACA] hover:bg-[#FFF2F2]"
+          >
+            Delete permanently
+          </button>
+        ) : null}
       </div>
     </article>
   );

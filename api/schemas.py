@@ -247,6 +247,11 @@ class PatchMockStatusRequest(BaseModel):
     status: MockStatus
 
 
+class DeleteMockResponse(BaseModel):
+    ok: bool
+    deleted_id: UUID
+
+
 class QuestionTreePart(BaseModel):
     part: int
     question_count: int
@@ -300,6 +305,11 @@ class PatchQuestionRequest(BaseModel):
     options: list[dict[str, Any]] | None = None
     correct_answer: str | None = None
     explanation: str | None = None
+    question_type: str | None = None
+    question_number: int | None = Field(default=None, ge=1)
+    part: int | None = Field(default=None, ge=1, le=4)
+    passage_text: str | None = None
+    skill_tag: str | None = None
 
 
 class IngestValidateRequest(BaseModel):
@@ -671,3 +681,212 @@ class SendDiagnosticReportResponse(BaseModel):
     ok: bool
     sent_at: datetime
     recipient: str
+
+
+# ---------------------------------------------------------------------------
+# Reading Builder
+# ---------------------------------------------------------------------------
+
+
+class ReadingBuilderQuestionIn(BaseModel):
+    question_type: str
+    prompt: str = Field(min_length=1)
+    options: list[dict[str, Any]] | None = None
+    correct_answer: str = ""
+    alt_answers: list[str] = Field(default_factory=list)
+    skill_tag: str | None = None
+
+
+class ReadingBuilderSaveRequest(BaseModel):
+    passage_text: str = Field(min_length=1)
+    questions: list[ReadingBuilderQuestionIn] = Field(min_length=1, max_length=60)
+
+
+class ReadingBuilderSaveResponse(BaseModel):
+    ok: bool
+    questions_written: int
+    part: int
+
+
+class ReadingBuilderQuestionOut(BaseModel):
+    id: UUID
+    question_number: int
+    question_type: str
+    prompt: str
+    passage_text: str | None = None
+    options: list[dict[str, Any]] | None = None
+    correct_answer: str = ""
+    alt_answers: list[str] = Field(default_factory=list)
+    skill_tag: str | None = None
+
+
+class ReadingPassageResponse(BaseModel):
+    mock_test_id: UUID
+    part: int
+    passage_text: str | None = None
+    questions: list[ReadingBuilderQuestionOut] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Listening Builder
+# ---------------------------------------------------------------------------
+
+
+class ListeningBuilderQuestionIn(BaseModel):
+    question_type: str
+    prompt: str = Field(min_length=1)
+    options: list[dict[str, Any]] | None = None
+    correct_answer: str = ""
+    alt_answers: list[str] = Field(default_factory=list)
+    skill_tag: str | None = None
+    instructions: str | None = None
+    choose_two: bool = False
+
+
+class ListeningBuilderSaveRequest(BaseModel):
+    audio_key: str = Field(min_length=1)
+    instructions: str | None = None
+    questions: list[ListeningBuilderQuestionIn] = Field(min_length=1, max_length=60)
+
+
+class ListeningBuilderSaveResponse(BaseModel):
+    ok: bool
+    questions_written: int
+    part: int
+    audio_key: str
+
+
+class ListeningBuilderQuestionOut(BaseModel):
+    id: UUID
+    question_number: int
+    question_type: str
+    prompt: str
+    instructions: str | None = None
+    options: list[dict[str, Any]] | None = None
+    correct_answer: str = ""
+    alt_answers: list[str] = Field(default_factory=list)
+    skill_tag: str | None = None
+    choose_two: bool = False
+
+
+class ListeningPartResponse(BaseModel):
+    mock_test_id: UUID
+    part: int
+    audio_key: str | None = None
+    instructions: str | None = None
+    questions: list[ListeningBuilderQuestionOut] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Writing Builder
+# ---------------------------------------------------------------------------
+
+
+class WritingBuilderSaveRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    question_type: str | None = None
+    options: dict[str, Any] | None = None
+    image_url: str | None = None
+
+
+class WritingBuilderSaveResponse(BaseModel):
+    ok: bool
+    part: int
+    question_type: str
+    image_url: str | None = None
+
+
+class WritingPartResponse(BaseModel):
+    mock_test_id: UUID
+    part: int
+    question_id: UUID | None = None
+    question_type: str
+    prompt: str = ""
+    options: dict[str, Any] = Field(default_factory=dict)
+    image_url: str | None = None
+    image_preview_url: str | None = None
+    image_name: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Speaking Builder
+# ---------------------------------------------------------------------------
+
+
+class SpeakingBuilderQuestionIn(BaseModel):
+    prompt: str = Field(min_length=1)
+    speak_time_sec: int | None = Field(default=15, ge=1, le=300)
+    min_skip_sec: int | None = Field(default=5, ge=0, le=300)
+    prep_sec: int | None = Field(default=None, ge=0, le=300)
+    record_sec: int | None = Field(default=None, ge=1, le=3600)
+    video_url: str | None = None
+
+
+class SpeakingBuilderQuestionOut(BaseModel):
+    id: UUID
+    question_number: int
+    prompt: str = ""
+    speak_time_sec: int = 15
+    min_skip_sec: int = 5
+    prep_sec: int = 0
+    record_sec: int = 45
+    video_url: str | None = None
+    video_preview_url: str | None = None
+    video_name: str | None = None
+
+
+class SpeakingBuilderSaveRequest(BaseModel):
+    questions: list[SpeakingBuilderQuestionIn] = Field(min_length=1)
+
+
+class SpeakingBuilderSaveResponse(BaseModel):
+    ok: bool
+    questions_written: int
+    part: int
+
+
+class SpeakingPartResponse(BaseModel):
+    mock_test_id: UUID
+    part: int
+    questions: list[SpeakingBuilderQuestionOut] = Field(default_factory=list)
+
+
+class CreateQuestionRequest(BaseModel):
+    mock_test_id: UUID
+    module: Literal["reading", "listening"]
+    part: int = Field(ge=1, le=4)
+    question_type: str
+    question_number: int = Field(ge=1)
+    prompt: str = Field(min_length=1)
+    passage_text: str | None = None
+    options: list[dict[str, Any]] | None = None
+    correct_answer: str | None = None
+    skill_tag: str | None = None
+
+
+class CreateQuestionResponse(BaseModel):
+    id: UUID
+    question_number: int
+    question_type: str
+    prompt: str
+
+
+class UpdateQuestionRequest(BaseModel):
+    question_type: str | None = None
+    prompt: str | None = None
+    options: list[dict[str, Any]] | None = None
+    correct_answer: str | None = None
+    alt_answers: list[str] | None = None
+    skill_tag: str | None = None
+
+
+class UpdateQuestionResponse(BaseModel):
+    id: UUID
+    question_number: int
+    question_type: str
+    prompt: str
+
+
+class DeleteQuestionResponse(BaseModel):
+    ok: bool
+    deleted_id: UUID

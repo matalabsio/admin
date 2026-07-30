@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { Headphones, BookOpen, Eye } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  BookOpen,
+  ChevronDown,
+  Eye,
+  Headphones,
+  MessageSquare,
+  PenTool,
+} from "lucide-react";
 import { AdminMockEditForm } from "@/components/admin/admin-mock-edit-form";
 import {
   adminApi,
@@ -14,6 +22,7 @@ import {
   adminBtnSecondary,
   adminCard,
   adminHeading,
+  adminInput,
   adminLink,
   adminMeta,
   adminMutedLabel,
@@ -24,6 +33,7 @@ import { cn } from "@/lib/utils";
 type Props = { mockId: string };
 
 export function AdminMockDetailClient({ mockId }: Props) {
+  const router = useRouter();
   const [mock, setMock] = useState<AdminMockDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -87,6 +97,23 @@ export function AdminMockDetailClient({ mockId }: Props) {
     }
   };
 
+  const deleteMock = async () => {
+    if (!mock) return;
+    const ok = window.confirm(
+      `Delete “${mock.title}” permanently?\n\nThis removes the mock and all its questions. This cannot be undone.`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await adminApi.deleteMock(mock.id);
+      router.push("/admin/mocks");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -120,6 +147,16 @@ export function AdminMockDetailClient({ mockId }: Props) {
           >
             {mock.status === "published" ? "Unpublish" : "Publish"}
           </button>
+          {mock.status === "draft" || mock.status === "archived" ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void deleteMock()}
+              className="inline-flex w-full cursor-pointer items-center justify-center rounded-[11px] border border-[#FBCACA] bg-[#FFF2F2] px-4 py-2.5 text-sm font-bold text-[#B42318] transition-colors hover:bg-[#FEE2E2] disabled:opacity-60 sm:w-auto"
+            >
+              Delete
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -173,40 +210,13 @@ export function AdminMockDetailClient({ mockId }: Props) {
           {mock.catalog_number ? <span>· Test {mock.catalog_number} slot</span> : null}
         </div>
 
-        <div className="mt-4">
-          <h2 className={cn(adminHeading, "text-sm")}>Listening sections</h2>
-          <p className="mt-1 text-sm text-gray-700">
-            Upload MP3 + JSON per section. Each section needs questions and an R2 audio key.
-          </p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {Array.from({ length: listeningParts }, (_, i) => i + 1).map((part) => (
-              <SectionLink
-                key={`l-${part}`}
-                href={`/admin/mocks/${mockId}/ingest?module=listening&part=${part}`}
-                label={`Listening — Section ${part}`}
-                status={sectionMap.get("listening")?.get(part)}
-                module="listening"
-                icon={<Headphones className="size-4 text-cyan" />}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <h2 className={cn(adminHeading, "text-sm")}>Reading passages</h2>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {Array.from({ length: readingPassages }, (_, i) => i + 1).map((part) => (
-              <SectionLink
-                key={`r-${part}`}
-                href={`/admin/mocks/${mockId}/ingest?module=reading&part=${part}`}
-                label={`Reading — Passage ${part}`}
-                status={sectionMap.get("reading")?.get(part)}
-                module="reading"
-                icon={<BookOpen className="size-4 text-cyan" />}
-              />
-            ))}
-          </div>
-        </div>
+        <ModuleSectionManager
+          mockId={mockId}
+          mock={mock}
+          sectionMap={sectionMap}
+          listeningParts={listeningParts}
+          readingPassages={readingPassages}
+        />
 
         <div className="space-y-3">
           <p className={adminMutedLabel}>Module summary</p>
@@ -222,14 +232,198 @@ export function AdminMockDetailClient({ mockId }: Props) {
         </div>
 
         <div className="flex flex-wrap gap-2 pt-2">
-          <Link href={`/admin/mocks/${mockId}/ingest`} className={adminBtnPrimary}>
-            Ingest content
+          <Link
+            href={`/admin/mocks/${mockId}/listening/1`}
+            className={adminBtnPrimary}
+          >
+            Listening builder
+          </Link>
+          <Link
+            href={`/admin/mocks/${mockId}/reading/1`}
+            className={adminBtnSecondary}
+          >
+            Reading builder
+          </Link>
+          <Link
+            href={`/admin/mocks/${mockId}/writing/1`}
+            className={adminBtnSecondary}
+          >
+            Writing builder
+          </Link>
+          <Link
+            href={`/admin/mocks/${mockId}/speaking/1`}
+            className={adminBtnSecondary}
+          >
+            Speaking builder
           </Link>
           <Link href={`/admin/mocks/${mockId}/questions`} className={adminBtnSecondary}>
             Edit questions
           </Link>
         </div>
       </div>
+    </div>
+  );
+}
+
+const MODULE_OPTIONS = [
+  { value: "listening", label: "Listening", icon: Headphones },
+  { value: "reading", label: "Reading", icon: PenTool },
+  { value: "writing", label: "Writing", icon: BookOpen },
+  { value: "speaking", label: "Speaking", icon: MessageSquare },
+] as const;
+
+function ModuleSectionManager({
+  mockId,
+  mock,
+  sectionMap,
+  listeningParts,
+  readingPassages,
+}: {
+  mockId: string;
+  mock: AdminMockDetail;
+  sectionMap: Map<string, Map<number, SectionStatus>>;
+  listeningParts: number;
+  readingPassages: number;
+}) {
+  const router = useRouter();
+  const [selectedModule, setSelectedModule] = useState<string>("listening");
+  const writingTasks =
+    typeof (mock as { configured_writing_tasks?: number }).configured_writing_tasks ===
+    "number"
+      ? (mock as { configured_writing_tasks: number }).configured_writing_tasks
+      : 2;
+
+  function onModuleChange(value: string) {
+    setSelectedModule(value);
+    if (value === "reading") {
+      router.push(`/admin/mocks/${mockId}/reading/1`);
+    }
+    if (value === "listening") {
+      router.push(`/admin/mocks/${mockId}/listening/1`);
+    }
+    if (value === "writing") {
+      router.push(`/admin/mocks/${mockId}/writing/1`);
+    }
+    if (value === "speaking") {
+      router.push(`/admin/mocks/${mockId}/speaking/1`);
+    }
+  }
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div>
+        <p className={cn(adminMutedLabel, "mb-2")}>Select module</p>
+        <div className="relative inline-block w-full max-w-xs">
+          <select
+            value={selectedModule}
+            onChange={(e) => onModuleChange(e.target.value)}
+            className={cn(
+              adminInput,
+              "mt-0 appearance-none pr-10 font-semibold capitalize",
+            )}
+          >
+            {MODULE_OPTIONS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-[#94A3B8]" />
+        </div>
+      </div>
+
+      {selectedModule === "listening" && (
+        <div>
+          <h2 className={cn(adminHeading, "text-sm")}>Listening builder</h2>
+          <p className="mt-1 text-sm text-gray-700">
+            Opening the visual listening builder…
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {Array.from({ length: listeningParts }, (_, i) => i + 1).map((part) => (
+              <SectionLink
+                key={`l-${part}`}
+                href={`/admin/mocks/${mockId}/listening/${part}`}
+                label={`Listening — Part ${part}`}
+                status={sectionMap.get("listening")?.get(part)}
+                module="listening"
+                icon={<Headphones className="size-4 text-cyan" />}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selectedModule === "reading" && (
+        <div>
+          <h2 className={cn(adminHeading, "text-sm")}>Reading builder</h2>
+          <p className="mt-1 text-sm text-gray-700">
+            Opening the visual reading builder…
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {Array.from({ length: readingPassages }, (_, i) => i + 1).map((part) => (
+              <SectionLink
+                key={`r-${part}`}
+                href={`/admin/mocks/${mockId}/reading/${part}`}
+                label={`Reading — Passage ${part}`}
+                status={sectionMap.get("reading")?.get(part)}
+                module="reading"
+                icon={<PenTool className="size-4 text-cyan" />}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selectedModule === "writing" && (
+        <div>
+          <h2 className={cn(adminHeading, "text-sm")}>Writing builder</h2>
+          <p className="mt-1 text-sm text-gray-700">
+            Writing prompts are configured per task. Task 1 can include a chart
+            image; Task 2 is the essay prompt.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {Array.from({ length: writingTasks }, (_, i) => i + 1).map((part) => (
+              <SectionLink
+                key={`w-${part}`}
+                href={`/admin/mocks/${mockId}/writing/${part}`}
+                label={`Writing — Task ${part}`}
+                status={sectionMap.get("writing")?.get(part)}
+                module="writing"
+                icon={<BookOpen className="size-4 text-cyan" />}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {selectedModule === "speaking" && (
+        <div>
+          <h2 className={cn(adminHeading, "text-sm")}>Speaking builder</h2>
+          <p className="mt-1 text-sm text-gray-700">
+            Add Part 1–3 prompts and short examiner videos (10–15s). Part 2
+            requires a cue card and video.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {[1, 2, 3].map((part) => (
+              <SectionLink
+                key={`s-${part}`}
+                href={`/admin/mocks/${mockId}/speaking/${part}`}
+                label={`Speaking — Part ${part}`}
+                status={sectionMap.get("speaking")?.get(part)}
+                module="speaking"
+                icon={<MessageSquare className="size-4 text-cyan" />}
+              />
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-[#5A6B82]">
+            Human scoring lives in the{" "}
+            <Link href="/admin/speaking" className={adminLink}>
+              Speaking review queue
+            </Link>
+            .
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -244,14 +438,20 @@ function SectionLink({
   href: string;
   label: string;
   status?: SectionStatus;
-  module: "listening" | "reading";
+  module: "listening" | "reading" | "writing" | "speaking";
   icon: ReactNode;
 }) {
   const ready =
     status &&
     status.question_count > 0 &&
-    (module === "reading" || status.has_audio);
-  const partial = status && status.question_count > 0 && !ready;
+    (module === "listening" || module === "speaking"
+      ? status.has_audio
+      : true);
+  const partial =
+    status &&
+    status.question_count > 0 &&
+    !ready &&
+    (module === "listening" || module === "speaking");
 
   return (
     <Link
@@ -283,7 +483,9 @@ function SectionLink({
             ? `${status.question_count} Q`
             : module === "listening"
               ? "No audio"
-              : `${status.question_count} Q`}
+              : module === "speaking"
+                ? "No video"
+                : `${status.question_count} Q`}
       </span>
     </Link>
   );

@@ -70,7 +70,7 @@ def _format_audit_message(action: str, metadata: dict[str, Any] | None) -> str:
         return f"Admin uploaded {mod} questions{suffix}"
     if action == "mock.create":
         title = meta.get("title")
-        return f"Admin created mock{f' "{title}"' if title else ''}"
+        return f"Admin created mock {chr(34)}{title}{chr(34)}" if title else "Admin created mock"
     if action == "question.edit":
         return "Admin edited a question"
     if action == "mock.audio_upload":

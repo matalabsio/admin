@@ -86,7 +86,7 @@ function upcomingCatalogSlot(number: number): MockCatalogSlot {
   };
 }
 
-/** Placeholder slots up to 5 tests (matches legacy panel size). */
+/** Placeholder slots (at least 5). Expands when admin publishes higher catalog numbers. */
 export function buildCatalogPanel(
   live: MockCatalogApiItem[],
   maxSlots = 5,
@@ -101,8 +101,17 @@ export function buildCatalogPanel(
       .map((item) => [item.catalog_number as number, catalogItemToSlot(item)]),
   );
 
+  const highestPublished = [...byNumber.keys()].reduce(
+    (max, n) => Math.max(max, n),
+    0,
+  );
+  const slotsToShow = Math.min(
+    MAX_LIVE_CATALOG_NUMBER,
+    Math.max(maxSlots, highestPublished),
+  );
+
   const slots: MockCatalogSlot[] = [];
-  for (let n = 1; n <= maxSlots; n += 1) {
+  for (let n = 1; n <= slotsToShow; n += 1) {
     const existing = byNumber.get(n);
     if (existing) {
       slots.push(existing);

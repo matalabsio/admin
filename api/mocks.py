@@ -13,6 +13,7 @@ from app.admin.schemas import (
     AdminMockDetail,
     AdminMockListItem,
     CreateMockRequest,
+    DeleteMockResponse,
     MockModuleSummary,
     ModuleSectionStatus,
     PatchMockRequest,
@@ -57,7 +58,7 @@ def _fetch_section_rows(sb: Any, mock_id: str) -> list[dict[str, Any]]:
     return (
         _exec(
             sb.table("questions")
-            .select("module, part, audio_url")
+            .select("module, part, audio_url, options, prompt")
             .eq("mock_test_id", mock_id)
         ).data
         or []
@@ -73,6 +74,8 @@ def _build_section_status(
     listening_counts: dict[int, int] = {}
     listening_audio: dict[int, bool] = {}
     reading_counts: dict[int, int] = {}
+    speaking_counts: dict[int, int] = {}
+    speaking_video: dict[int, bool] = {}
 
     for row in rows:
         mod = str(row.get("module") or "")
@@ -83,6 +86,12 @@ def _build_section_status(
                 listening_audio[part] = True
         elif mod == "reading":
             reading_counts[part] = reading_counts.get(part, 0) + 1
+        elif mod == "speaking":
+            speaking_counts[part] = speaking_counts.get(part, 0) + 1
+            opts = row.get("options") if isinstance(row.get("options"), dict) else {}
+            video = opts.get("video_url") if isinstance(opts, dict) else None
+            if video and str(video).strip():
+                speaking_video[part] = True
 
     return [
         ModuleSectionStatus(
@@ -105,6 +114,17 @@ def _build_section_status(
                     has_audio=False,
                 )
                 for p in range(1, reading_passages + 1)
+            ],
+        ),
+        ModuleSectionStatus(
+            module="speaking",
+            sections=[
+                SectionStatus(
+                    part=p,
+                    question_count=speaking_counts.get(p, 0),
+                    has_audio=speaking_video.get(p, False),
+                )
+                for p in range(1, 4)
             ],
         ),
     ]
@@ -132,6 +152,20 @@ def _publish_blockers(
             for sec in mod_status.sections:
                 if sec.question_count <= 0:
                     blockers.append(f"Reading passage {sec.part}: no questions")
+        elif mod_status.module == "speaking":
+            by_part = {sec.part: sec for sec in mod_status.sections}
+            # Student flow starts with Part 1 (same as Test 1). Extra parts are optional.
+            sec = by_part.get(1)
+            if not sec or sec.question_count <= 0:
+                blockers.append("Speaking Part 1: no questions")
+            for p in (2, 3):
+                sec = by_part.get(p)
+                if not sec or sec.question_count <= 0:
+                    continue
+                if p == 2 and not sec.has_audio:
+                    blockers.append(
+                        "Speaking Part 2: missing short examiner video (R2)"
+                    )
 
     if blockers:
         return blockers
@@ -370,7 +404,8 @@ def _default_description(
     return (
         f"Listening ({listening_parts} parts, 30 min) → "
         f"Reading ({reading_passages} passages, 30 min) → "
-        f"Writing ({writing_tasks} tasks, 60 min)."
+        f"Writing ({writing_tasks} tasks, 60 min) → "
+        f"Speaking (Part 1, human-reviewed)."
     )
 
 
@@ -379,7 +414,7 @@ def _seed_mock_modules(sb: Any, mock_id: str) -> None:
         ("listening", 1, 30, True),
         ("reading", 2, 30, True),
         ("writing", 3, 60, True),
-        ("speaking", 4, 14, False),
+        ("speaking", 4, 14, True),
     ]
     _exec(
         sb.table("mock_test_modules").upsert(
@@ -514,3 +549,79 @@ def patch_mock_status(
     )
 
     return get_mock_detail(mock_id)
+
+
+def delete_mock(*, mock_id: UUID, admin_id: UUID) -> DeleteMockResponse:
+    """Permanently remove a draft or archived mock and its content.
+
+    Published (live) mocks must be archived first.
+    """
+    sb = get_supabase()
+    rows = (
+        _exec(
+            sb.table("mock_tests")
+            .select("id, status, title, is_published")
+            .eq("id", str(mock_id))
+            .limit(1)
+        )
+    ).data or []
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mock test not found.")
+    row = rows[0]
+    status_val = str(
+        row.get("status") or ("published" if row.get("is_published") else "draft")
+    )
+    if status_val == "published" or row.get("is_published"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Unpublish/archive this mock before deleting it.",
+        )
+
+    qrows = (
+        _exec(
+            sb.table("questions").select("id").eq("mock_test_id", str(mock_id))
+        )
+    ).data or []
+    qids = [str(r["id"]) for r in qrows]
+    if qids:
+        for i in range(0, len(qids), 200):
+            chunk = qids[i : i + 200]
+            _exec(sb.table("answers").delete().in_("question_id", chunk))
+            try:
+                _exec(
+                    sb.table("question_versions").delete().in_("question_id", chunk)
+                )
+            except Exception:
+                pass
+        _exec(sb.table("questions").delete().eq("mock_test_id", str(mock_id)))
+
+    try:
+        _exec(sb.table("mock_test_modules").delete().eq("mock_test_id", str(mock_id)))
+    except Exception:
+        pass
+
+    try:
+        _exec(sb.table("mock_attempts").delete().eq("mock_test_id", str(mock_id)))
+    except Exception:
+        pass
+
+    _exec(sb.table("mock_tests").delete().eq("id", str(mock_id)))
+
+    try:
+        from app.cache.hybrid_cache import delete_many
+        from app.listening.service import invalidate_listening_audio_caches
+
+        invalidate_listening_audio_caches(mock_test_id=mock_id)
+        delete_many([f"reading_questions:{mock_id}:{p}" for p in range(0, 5)])
+    except Exception:
+        pass
+
+    log_admin_action(
+        admin_id=admin_id,
+        action="mock.delete",
+        resource_type="mock_test",
+        resource_id=mock_id,
+        metadata={"title": row.get("title"), "status": status_val},
+    )
+
+    return DeleteMockResponse(ok=True, deleted_id=mock_id)
