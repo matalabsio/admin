@@ -14,6 +14,11 @@ import {
   type ReadingBuilderQuestionIn,
   type ReadingBuilderQuestionOut,
 } from "@/lib/admin-api";
+import {
+  type BuilderSource,
+  builderBackHref,
+  builderPartHref,
+} from "@/components/admin/admin-builder-source";
 import { AdminBuilderStickyBar } from "@/components/admin/admin-builder-sticky-bar";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import {
@@ -219,9 +224,9 @@ function serverToLocal(q: ReadingBuilderQuestionOut): LocalQuestion {
 /*  Component                                                         */
 /* ------------------------------------------------------------------ */
 
-type Props = { mockId: string; part: number };
+type Props = { source: BuilderSource; part: number };
 
-export function AdminReadingBuilderClient({ mockId, part }: Props) {
+export function AdminReadingBuilderClient({ source, part }: Props) {
   const [passageText, setPassageText] = useState("");
   const [questions, setQuestions] = useState<LocalQuestion[]>([]);
   const [selectedType, setSelectedType] = useState<string>(ALL_TYPES[0]);
@@ -237,25 +242,42 @@ export function AdminReadingBuilderClient({ mockId, part }: Props) {
   const [mockTitle, setMockTitle] = useState<string>("");
   const [passageCount, setPassageCount] = useState(3);
 
-  /* Load mock meta (title + passage count) once */
+  const sourceId = source.kind === "mock" ? source.mockId : source.setId;
+
+  /* Load title + passage count once */
   useEffect(() => {
-    void adminApi
-      .getMock(mockId)
-      .then((m) => {
-        setMockTitle(m.title || "");
-        setPassageCount(m.configured_reading_passages ?? 3);
-      })
-      .catch(() => {
-        /* non-blocking — builder still works */
-      });
-  }, [mockId]);
+    if (source.kind === "mock") {
+      void adminApi
+        .getMock(source.mockId)
+        .then((m) => {
+          setMockTitle(m.title || "");
+          setPassageCount(m.configured_reading_passages ?? 3);
+        })
+        .catch(() => {
+          /* non-blocking — builder still works */
+        });
+    } else {
+      void adminApi
+        .getQuestionBankSet(source.setId)
+        .then((s) => {
+          setMockTitle(s.title || "");
+          setPassageCount(4);
+        })
+        .catch(() => {
+          /* non-blocking — builder still works */
+        });
+    }
+  }, [source.kind, sourceId]);
 
   /* Load existing data */
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await adminApi.loadReadingPassage(mockId, part);
+      const res =
+        source.kind === "mock"
+          ? await adminApi.loadReadingPassage(source.mockId, part)
+          : await adminApi.loadBankReadingPart(source.setId, part);
       setPassageText(res.passage_text || "");
       setQuestions(res.questions.map(serverToLocal));
     } catch (e) {
@@ -263,7 +285,7 @@ export function AdminReadingBuilderClient({ mockId, part }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [mockId, part]);
+  }, [source, part]);
 
   useEffect(() => {
     void load();
@@ -468,7 +490,10 @@ export function AdminReadingBuilderClient({ mockId, part }: Props) {
         passage_text: passageText,
         questions: questions.map(questionToPayload),
       };
-      const res = await adminApi.saveReadingPassage(mockId, part, payload);
+      const res =
+        source.kind === "mock"
+          ? await adminApi.saveReadingPassage(source.mockId, part, payload)
+          : await adminApi.saveBankReadingPart(source.setId, part, payload);
       setSaveMsg(`Saved ${res.questions_written} questions.`);
       await load();
     } catch (e) {
@@ -526,7 +551,7 @@ export function AdminReadingBuilderClient({ mockId, part }: Props) {
             </button>
           }
         />
-        <PassageTabs mockId={mockId} part={part} passageCount={passageCount} />
+        <PassageTabs source={source} part={part} passageCount={passageCount} />
         <div className={cn(adminCard, "mt-6")}>
           <span className="mb-4 inline-block rounded-full bg-[#EEF1F5] px-3 py-1 font-mono text-[10px] font-medium uppercase tracking-wider text-[#64748B]">
             Student preview
@@ -577,7 +602,7 @@ export function AdminReadingBuilderClient({ mockId, part }: Props) {
           ))}
         </div>
         <AdminBuilderStickyBar
-          mockId={mockId}
+          source={source}
           activeModule="reading"
           label={`${questions.length} ${questions.length === 1 ? "question" : "questions"} added`}
           previewMode
@@ -603,7 +628,7 @@ export function AdminReadingBuilderClient({ mockId, part }: Props) {
         title="Reading builder"
         actions={
           <Link
-            href={`/admin/mocks/${mockId}`}
+            href={builderBackHref(source)}
             className={cn("text-sm", adminLink)}
           >
             ← Back to test
@@ -611,7 +636,7 @@ export function AdminReadingBuilderClient({ mockId, part }: Props) {
         }
       />
 
-      <PassageTabs mockId={mockId} part={part} passageCount={passageCount} />
+      <PassageTabs source={source} part={part} passageCount={passageCount} />
 
       {error && (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -913,7 +938,7 @@ export function AdminReadingBuilderClient({ mockId, part }: Props) {
       </div>
 
       <AdminBuilderStickyBar
-        mockId={mockId}
+        source={source}
         activeModule="reading"
         label={`${questions.length} ${questions.length === 1 ? "question" : "questions"} added`}
         previewMode={false}
@@ -930,11 +955,11 @@ export function AdminReadingBuilderClient({ mockId, part }: Props) {
 /* ------------------------------------------------------------------ */
 
 function PassageTabs({
-  mockId,
+  source,
   part,
   passageCount,
 }: {
-  mockId: string;
+  source: BuilderSource;
   part: number;
   passageCount: number;
 }) {
@@ -945,7 +970,7 @@ function PassageTabs({
       {Array.from({ length: count }, (_, i) => i + 1).map((p) => (
         <Link
           key={p}
-          href={`/admin/mocks/${mockId}/reading/${p}`}
+          href={builderPartHref(source, "reading", p)}
           className={cn(
             "rounded-full border-[1.5px] px-3.5 py-1.5 text-[13px] font-semibold transition-all",
             p === part

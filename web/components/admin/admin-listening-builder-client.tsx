@@ -15,9 +15,15 @@ import {
 import {
   adminApi,
   defaultListeningAudioKey,
+  defaultBankListeningAudioKey,
   type ListeningBuilderQuestionIn,
   type ListeningBuilderQuestionOut,
 } from "@/lib/admin-api";
+import {
+  type BuilderSource,
+  builderBackHref,
+  builderPartHref,
+} from "@/components/admin/admin-builder-source";
 import { AdminBuilderStickyBar } from "@/components/admin/admin-builder-sticky-bar";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import {
@@ -181,9 +187,9 @@ function serverToLocal(q: ListeningBuilderQuestionOut): LocalQuestion {
   };
 }
 
-type Props = { mockId: string; part: number };
+type Props = { source: BuilderSource; part: number };
 
-export function AdminListeningBuilderClient({ mockId, part }: Props) {
+export function AdminListeningBuilderClient({ source, part }: Props) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -210,19 +216,32 @@ export function AdminListeningBuilderClient({ mockId, part }: Props) {
   const [isPlaying, setIsPlaying] = useState(false);
 
   const expectedKey = useMemo(
-    () => defaultListeningAudioKey(mockId, part),
-    [mockId, part],
+    () =>
+      source.kind === "mock"
+        ? defaultListeningAudioKey(source.mockId, part)
+        : defaultBankListeningAudioKey(source.setId, part),
+    [source, part],
   );
 
   useEffect(() => {
+    if (source.kind === "mock") {
+      void adminApi
+        .getMock(source.mockId)
+        .then((m) => {
+          setMockTitle(m.title || "");
+          setPartCount(m.configured_listening_parts ?? 4);
+        })
+        .catch(() => {});
+      return;
+    }
     void adminApi
-      .getMock(mockId)
-      .then((m) => {
-        setMockTitle(m.title || "");
-        setPartCount(m.configured_listening_parts ?? 4);
+      .getQuestionBankSet(source.setId)
+      .then((s) => {
+        setMockTitle(s.title || "");
+        setPartCount(4);
       })
       .catch(() => {});
-  }, [mockId]);
+  }, [source]);
 
   const refreshAudioStatus = useCallback(
     async (key?: string) => {
@@ -232,7 +251,10 @@ export function AdminListeningBuilderClient({ mockId, part }: Props) {
         return false;
       }
       try {
-        const res = await adminApi.checkListeningAudio(mockId, part, k);
+        const res =
+          source.kind === "mock"
+            ? await adminApi.checkListeningAudio(source.mockId, part, k)
+            : await adminApi.checkBankListeningAudio(source.setId, part, k);
         const ok = Boolean(res.playable ?? res.exists_in_r2);
         setAudioInR2(ok);
         if (ok && res.audio_key) {
@@ -245,14 +267,17 @@ export function AdminListeningBuilderClient({ mockId, part }: Props) {
         return false;
       }
     },
-    [expectedKey, mockId, part],
+    [expectedKey, source, part],
   );
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await adminApi.loadListeningPart(mockId, part);
+      const res =
+        source.kind === "mock"
+          ? await adminApi.loadListeningPart(source.mockId, part)
+          : await adminApi.loadBankListeningPart(source.setId, part);
       setQuestions(res.questions.map(serverToLocal));
       const keyFromDb = (res.audio_key || "").trim();
       if (keyFromDb) {
@@ -272,7 +297,7 @@ export function AdminListeningBuilderClient({ mockId, part }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [expectedKey, mockId, part, refreshAudioStatus]);
+  }, [expectedKey, source, part, refreshAudioStatus]);
 
   useEffect(() => {
     void load();
@@ -322,7 +347,14 @@ export function AdminListeningBuilderClient({ mockId, part }: Props) {
     setError(null);
     setSaveMsg(null);
     try {
-      const res = await adminApi.uploadListeningAudio(mockId, part, pendingFile);
+      const res =
+        source.kind === "mock"
+          ? await adminApi.uploadListeningAudio(source.mockId, part, pendingFile)
+          : await adminApi.uploadBankListeningAudio(
+              source.setId,
+              part,
+              pendingFile,
+            );
       const key = res.audio_key || expectedKey;
       setAudioKey(key);
       setAudioName(pendingFile.name || key.split("/").pop() || key);
@@ -487,10 +519,16 @@ export function AdminListeningBuilderClient({ mockId, part }: Props) {
     setError(null);
     setSaveMsg(null);
     try {
-      const res = await adminApi.saveListeningPart(mockId, part, {
-        audio_key: key,
-        questions: questions.map(questionToPayload),
-      });
+      const res =
+        source.kind === "mock"
+          ? await adminApi.saveListeningPart(source.mockId, part, {
+              audio_key: key,
+              questions: questions.map(questionToPayload),
+            })
+          : await adminApi.saveBankListeningPart(source.setId, part, {
+              audio_key: key,
+              questions: questions.map(questionToPayload),
+            });
       setSaveMsg(`Saved ${res.questions_written} questions.`);
       await load();
     } catch (e) {
@@ -546,7 +584,7 @@ export function AdminListeningBuilderClient({ mockId, part }: Props) {
             </button>
           }
         />
-        <PartTabs mockId={mockId} part={part} partCount={partCount} />
+        <PartTabs source={source} part={part} partCount={partCount} />
         <div className={cn(adminCard, "mt-6")}>
           <span className="mb-4 inline-block rounded-full bg-[#EEF1F5] px-3 py-1 font-mono text-[10px] font-medium uppercase tracking-wider text-[#64748B]">
             Student preview
@@ -605,7 +643,7 @@ export function AdminListeningBuilderClient({ mockId, part }: Props) {
           ))}
         </div>
         <AdminBuilderStickyBar
-          mockId={mockId}
+          source={source}
           activeModule="listening"
           label={`${questions.length} ${questions.length === 1 ? "question" : "questions"} added`}
           previewMode
@@ -624,15 +662,15 @@ export function AdminListeningBuilderClient({ mockId, part }: Props) {
         title="Listening builder"
         actions={
           <Link
-            href={`/admin/mocks/${mockId}`}
+            href={builderBackHref(source)}
             className={cn("text-sm", adminLink)}
           >
-            ← Back to test
+            ← Back
           </Link>
         }
       />
 
-      <PartTabs mockId={mockId} part={part} partCount={partCount} />
+      <PartTabs source={source} part={part} partCount={partCount} />
 
       {error && (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -1025,7 +1063,7 @@ export function AdminListeningBuilderClient({ mockId, part }: Props) {
       </div>
 
       <AdminBuilderStickyBar
-        mockId={mockId}
+        source={source}
         activeModule="listening"
         label={`${questions.length} ${questions.length === 1 ? "question" : "questions"} added`}
         previewMode={false}
@@ -1038,11 +1076,11 @@ export function AdminListeningBuilderClient({ mockId, part }: Props) {
 }
 
 function PartTabs({
-  mockId,
+  source,
   part,
   partCount,
 }: {
-  mockId: string;
+  source: BuilderSource;
   part: number;
   partCount: number;
 }) {
@@ -1053,7 +1091,7 @@ function PartTabs({
       {Array.from({ length: count }, (_, i) => i + 1).map((p) => (
         <Link
           key={p}
-          href={`/admin/mocks/${mockId}/listening/${p}`}
+          href={builderPartHref(source, "listening", p)}
           className={cn(
             "rounded-full border-[1.5px] px-3.5 py-1.5 text-[13px] font-semibold transition-all",
             p === part

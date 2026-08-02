@@ -212,6 +212,7 @@ export type AdminMockListItem = {
     is_enabled: boolean;
     question_count: number;
     parts: number[];
+    part_counts?: { part: number; question_count: number }[];
   }[];
 };
 
@@ -648,6 +649,89 @@ export type ListeningPartResponse = {
   audio_key: string | null;
   instructions: string | null;
   questions: ListeningBuilderQuestionOut[];
+};
+
+export type QuestionBankSectionSummary = {
+  part: number;
+  question_count: number;
+  has_content: boolean;
+};
+
+export type QuestionBankSetItem = {
+  set_id: string;
+  set_number: number;
+  title: string;
+  difficulty: string;
+  bank_id: string;
+  bank_number: number;
+  bank_title: string;
+  skill: string;
+  hub_id: string | null;
+  hub_slug: string | null;
+  description?: string | null;
+  status?: string;
+  is_custom?: boolean;
+  created_at?: string | null;
+  sections: QuestionBankSectionSummary[];
+  total_questions: number;
+};
+
+export type QuestionBankListResponse = {
+  skill: string;
+  sets: QuestionBankSetItem[];
+};
+
+export type QuestionBankCreateSetResponse = {
+  set_id: string;
+  skill: string;
+  title: string;
+  hub_id: string;
+  parts: number;
+  bank_number: number;
+  set_number: number;
+  status: string;
+};
+
+export type BankListeningPartResponse = {
+  practice_set_id: string;
+  part: number;
+  audio_key: string | null;
+  instructions: string | null;
+  questions: ListeningBuilderQuestionOut[];
+};
+
+export type BankReadingPartResponse = {
+  practice_set_id: string;
+  part: number;
+  passage_text: string;
+  questions: ReadingBuilderQuestionOut[];
+};
+
+export type BankWritingPartResponse = {
+  practice_set_id: string;
+  part: number;
+  question_id: string | null;
+  question_type: string;
+  prompt: string;
+  options: Record<string, unknown>;
+  image_url: string | null;
+  image_preview_url: string | null;
+};
+
+export type BankSpeakingPartResponse = {
+  practice_set_id: string;
+  part: number;
+  questions: Array<{
+    id: string;
+    question_number: number;
+    prompt: string;
+    speak_time_sec: number;
+    min_skip_sec: number;
+    prep_sec: number;
+    record_sec: number;
+    video_url: string | null;
+    video_preview_url: string | null;
+  }>;
 };
 
 export type WritingPartResponse = {
@@ -1274,4 +1358,170 @@ export const adminApi = {
     const suffix = q.toString() ? `?${q}` : "";
     return adminCall<ReviewAnalyticsResponse>(`/review-analytics${suffix}`);
   },
+
+  listQuestionBank(skill: string) {
+    return adminCall<QuestionBankListResponse>(
+      `/question-bank?skill=${encodeURIComponent(skill)}`,
+    );
+  },
+
+  createQuestionBankSet(body: {
+    skill: string;
+    title: string;
+    description?: string | null;
+    status?: "draft" | "published" | "archived";
+  }) {
+    return adminCall<QuestionBankCreateSetResponse>(`/question-bank/sets`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  getQuestionBankSet(setId: string) {
+    return adminCall<QuestionBankSetItem>(`/question-bank/sets/${setId}`);
+  },
+
+  loadBankListeningPart(setId: string, part: number) {
+    return adminCall<BankListeningPartResponse>(
+      `/question-bank/sets/${setId}/listening/${part}`,
+    );
+  },
+
+  saveBankListeningPart(
+    setId: string,
+    part: number,
+    body: {
+      audio_key: string;
+      instructions?: string | null;
+      questions: ListeningBuilderQuestionIn[];
+    },
+  ) {
+    return adminCall<{
+      ok: boolean;
+      questions_written: number;
+      part: number;
+      audio_key: string;
+    }>(`/question-bank/sets/${setId}/listening/${part}/save`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  uploadBankListeningAudio(setId: string, part: number, file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return adminMultipartCall<{ ok: boolean; audio_key: string; part: number }>(
+      `/question-bank/sets/${setId}/listening/${part}/audio`,
+      formData,
+    );
+  },
+
+  checkBankListeningAudio(setId: string, part: number, audioKey?: string) {
+    const q = audioKey
+      ? `?audio_key=${encodeURIComponent(audioKey)}`
+      : "";
+    return adminCall<{
+      audio_key: string;
+      exists_in_r2: boolean;
+      playable: boolean;
+      size_bytes: number;
+      part: number;
+    }>(`/question-bank/sets/${setId}/listening/${part}/audio-status${q}`);
+  },
+
+  loadBankReadingPart(setId: string, part: number) {
+    return adminCall<BankReadingPartResponse>(
+      `/question-bank/sets/${setId}/reading/${part}`,
+    );
+  },
+
+  saveBankReadingPart(
+    setId: string,
+    part: number,
+    body: { passage_text: string; questions: ReadingBuilderQuestionIn[] },
+  ) {
+    return adminCall<{ ok: boolean; questions_written: number; part: number }>(
+      `/question-bank/sets/${setId}/reading/${part}/save`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+
+  loadBankWritingPart(setId: string, part: number) {
+    return adminCall<BankWritingPartResponse>(
+      `/question-bank/sets/${setId}/writing/${part}`,
+    );
+  },
+
+  saveBankWritingPart(
+    setId: string,
+    part: number,
+    body: {
+      prompt: string;
+      question_type?: string | null;
+      options?: Record<string, unknown> | null;
+      image_url?: string | null;
+    },
+  ) {
+    return adminCall<{
+      ok: boolean;
+      part: number;
+      question_type: string;
+      image_url: string | null;
+    }>(`/question-bank/sets/${setId}/writing/${part}/save`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  uploadBankWritingImage(setId: string, part: number, file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return adminMultipartCall<{
+      ok: boolean;
+      image_url: string;
+      image_preview_url?: string | null;
+      image_name?: string;
+    }>(`/question-bank/sets/${setId}/writing/${part}/image`, formData);
+  },
+
+  loadBankSpeakingPart(setId: string, part: number) {
+    return adminCall<BankSpeakingPartResponse>(
+      `/question-bank/sets/${setId}/speaking/${part}`,
+    );
+  },
+
+  saveBankSpeakingPart(
+    setId: string,
+    part: number,
+    body: {
+      questions: Array<{
+        prompt: string;
+        speak_time_sec?: number | null;
+        min_skip_sec?: number | null;
+        prep_sec?: number | null;
+        record_sec?: number | null;
+        video_url?: string | null;
+      }>;
+    },
+  ) {
+    return adminCall<{ ok: boolean; questions_written: number; part: number }>(
+      `/question-bank/sets/${setId}/speaking/${part}/save`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+
+  uploadBankSpeakingVideo(setId: string, part: number, file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    return adminMultipartCall<{
+      ok: boolean;
+      video_url: string;
+      video_preview_url?: string | null;
+      video_name?: string;
+    }>(`/question-bank/sets/${setId}/speaking/${part}/video`, formData);
+  },
 };
+
+export function defaultBankListeningAudioKey(setId: string, part: number): string {
+  return `bank/${setId}/listening/part${part}/audio.mp3`;
+}

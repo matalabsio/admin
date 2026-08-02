@@ -15,6 +15,7 @@ from app.admin.schemas import (
     CreateMockRequest,
     DeleteMockResponse,
     MockModuleSummary,
+    MockPartCount,
     ModuleSectionStatus,
     PatchMockRequest,
     PatchMockStatusRequest,
@@ -253,6 +254,10 @@ def _module_summaries(
         part_counts = counts.get(mod, {})
         configured = live_parts_tuple(mock_test_id=mock_id, module=mod) or ()
         parts = sorted(part_counts.keys()) or list(configured)
+        part_count_rows = [
+            MockPartCount(part=int(p), question_count=int(part_counts.get(p, 0)))
+            for p in parts
+        ]
         result.append(
             MockModuleSummary(
                 module=mod,
@@ -261,6 +266,7 @@ def _module_summaries(
                 is_enabled=bool(row["is_enabled"]),
                 question_count=sum(part_counts.values()),
                 parts=parts,
+                part_counts=part_count_rows,
             )
         )
     return result

@@ -7,10 +7,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function AdminWritingPage() {
+type Props = { searchParams: Promise<{ status?: string }> };
+
+export default async function AdminWritingPage({ searchParams }: Props) {
+  const sp = await searchParams;
   return (
     <AdminShell hidePageHeader>
-      <AdminWritingClient />
+      <AdminWritingClient initialStatus={sp.status} />
     </AdminShell>
   );
 }

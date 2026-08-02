@@ -2,9 +2,9 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   BarChart3,
-  ClipboardList,
   CreditCard,
   LayoutDashboard,
+  Library,
   Mic,
   ScrollText,
   Users,
@@ -36,16 +36,17 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         description: "Metrics and quick actions",
       },
       {
+        href: "/admin/question-bank/overview",
+        label: "Question bank",
+        Icon: Library,
+        description: "Inventory, coverage, and set builders",
+        match: ["/admin/question-bank"],
+      },
+      {
         href: "/admin/users",
         label: "Users",
         Icon: Users,
         description: "Accounts and activity",
-      },
-      {
-        href: "/admin/mocks",
-        label: "Mock tests",
-        Icon: ClipboardList,
-        description: "Content catalog and ingest",
       },
       {
         href: "/admin/speaking",
@@ -99,7 +100,11 @@ export type AdminTopNavItem = {
 /** Horizontal top nav (design system). */
 export const ADMIN_TOP_NAV: AdminTopNavItem[] = [
   { href: "/admin", label: "Dashboard", exact: true },
-  { href: "/admin/mocks", label: "Mocks" },
+  {
+    href: "/admin/question-bank/overview",
+    label: "Question bank",
+    match: ["/admin/question-bank"],
+  },
   { href: "/admin/users", label: "Users" },
   {
     href: "/admin/speaking",
@@ -118,7 +123,6 @@ export const ADMIN_TOP_NAV: AdminTopNavItem[] = [
 /** Mobile fixed bottom tab bar. */
 export const ADMIN_BOTTOM_NAV: AdminNavItem[] = [
   { href: "/admin", label: "Dashboard", Icon: LayoutDashboard, exact: true },
-  { href: "/admin/mocks", label: "Mocks", Icon: ClipboardList },
   { href: "/admin/users", label: "Users", Icon: Users },
   { href: "/admin/speaking", label: "Evaluator", Icon: Mic, match: ["/admin/writing", "/admin/diagnostics"] },
   {

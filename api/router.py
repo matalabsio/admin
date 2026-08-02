@@ -15,6 +15,7 @@ from app.admin import (
     mocks,
     mocks_ingest,
     payments as admin_payments,
+    question_bank,
     questions,
     reading_builder,
     listening_builder,
@@ -65,6 +66,14 @@ from app.admin.schemas import (
     ListeningBuilderSaveRequest,
     ListeningBuilderSaveResponse,
     ListeningPartResponse,
+    QuestionBankListResponse,
+    QuestionBankCreateSetRequest,
+    QuestionBankCreateSetResponse,
+    QuestionBankSetItem,
+    BankListeningPartResponse,
+    BankReadingPartResponse,
+    BankWritingPartResponse,
+    BankSpeakingPartResponse,
     WritingBuilderSaveRequest,
     WritingBuilderSaveResponse,
     WritingPartResponse,
@@ -219,6 +228,394 @@ def delete_mock_route(
     return mocks.delete_mock(mock_id=mock_id, admin_id=admin.id)
 
 
+ADMIN_AUDIO_MAX_BYTES = 200 * 1024 * 1024
+
+
+# --- Question bank (standalone practice-set content) -------------------------
+
+
+@router.get("/question-bank", response_model=QuestionBankListResponse)
+def list_question_bank_route(
+    _admin: Annotated[UserPublic, Depends(require_admin)],
+    skill: str = Query("listening"),
+) -> QuestionBankListResponse:
+    return question_bank.list_question_bank(skill=skill)
+
+
+@router.post(
+    "/question-bank/sets",
+    response_model=QuestionBankCreateSetResponse,
+)
+def create_question_bank_set_route(
+    body: QuestionBankCreateSetRequest,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> QuestionBankCreateSetResponse:
+    return question_bank.create_question_bank_set(body=body, admin_id=admin.id)
+
+
+@router.get(
+    "/question-bank/sets/{set_id}",
+    response_model=QuestionBankSetItem,
+)
+def get_question_bank_set_route(
+    set_id: UUID,
+    _admin: Annotated[UserPublic, Depends(require_admin)],
+) -> QuestionBankSetItem:
+    return question_bank.get_question_bank_set(set_id=set_id)
+
+
+@router.get(
+    "/question-bank/sets/{set_id}/listening/{part}",
+    response_model=BankListeningPartResponse,
+)
+def load_bank_listening_route(
+    set_id: UUID,
+    part: int,
+    _admin: Annotated[UserPublic, Depends(require_admin)],
+) -> BankListeningPartResponse:
+    return question_bank.load_bank_listening(set_id=set_id, part=part)
+
+
+@router.post(
+    "/question-bank/sets/{set_id}/listening/{part}/save",
+    response_model=ListeningBuilderSaveResponse,
+)
+def save_bank_listening_route(
+    set_id: UUID,
+    part: int,
+    body: ListeningBuilderSaveRequest,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> ListeningBuilderSaveResponse:
+    return question_bank.save_bank_listening(
+        set_id=set_id, part=part, body=body, admin_id=admin.id
+    )
+
+
+@router.post("/question-bank/sets/{set_id}/listening/{part}/audio")
+async def upload_bank_listening_audio_route(
+    request: Request,
+    set_id: UUID,
+    part: int,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+    file: UploadFile = File(...),
+):
+    _ = admin
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > ADMIN_AUDIO_MAX_BYTES:
+                raise HTTPException(
+                    status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Audio file is too large.",
+                )
+        except ValueError:
+            pass
+    content = await file.read()
+    if len(content) > ADMIN_AUDIO_MAX_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Audio file is too large.",
+        )
+    if not content:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Empty audio file.")
+    if len(content) < 10_000:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Audio file is too small to be a valid listening MP3.",
+        )
+    key = question_bank.default_bank_audio_key(set_id=set_id, part=part)
+    upload_object(key=key, body=content, content_type="audio/mpeg")
+    return {"ok": True, "audio_key": key, "part": part}
+
+
+@router.get("/question-bank/sets/{set_id}/listening/{part}/audio-status")
+def bank_listening_audio_status_route(
+    set_id: UUID,
+    part: int,
+    _admin: Annotated[UserPublic, Depends(require_admin)],
+    audio_key: str | None = Query(default=None),
+):
+    key = (audio_key or "").strip() or question_bank.default_bank_audio_key(
+        set_id=set_id, part=part
+    )
+    meta = object_head(key)
+    size_bytes = int(meta.get("size") or 0) if meta else 0
+    content_type = str(meta.get("content_type") or "") if meta else ""
+    playable = (
+        meta is not None
+        and size_bytes >= 10_000
+        and (not content_type or content_type.startswith("audio/"))
+    )
+    return {
+        "audio_key": key,
+        "exists_in_r2": meta is not None,
+        "playable": playable,
+        "size_bytes": size_bytes,
+        "part": part,
+    }
+
+
+@router.get(
+    "/question-bank/sets/{set_id}/reading/{part}",
+    response_model=BankReadingPartResponse,
+)
+def load_bank_reading_route(
+    set_id: UUID,
+    part: int,
+    _admin: Annotated[UserPublic, Depends(require_admin)],
+) -> BankReadingPartResponse:
+    return question_bank.load_bank_reading(set_id=set_id, part=part)
+
+
+@router.post(
+    "/question-bank/sets/{set_id}/reading/{part}/save",
+    response_model=ReadingBuilderSaveResponse,
+)
+def save_bank_reading_route(
+    set_id: UUID,
+    part: int,
+    body: ReadingBuilderSaveRequest,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> ReadingBuilderSaveResponse:
+    return question_bank.save_bank_reading(
+        set_id=set_id, part=part, body=body, admin_id=admin.id
+    )
+
+
+@router.get(
+    "/question-bank/sets/{set_id}/writing/{part}",
+    response_model=BankWritingPartResponse,
+)
+def load_bank_writing_route(
+    set_id: UUID,
+    part: int,
+    _admin: Annotated[UserPublic, Depends(require_admin)],
+) -> BankWritingPartResponse:
+    return question_bank.load_bank_writing(set_id=set_id, part=part)
+
+
+@router.post(
+    "/question-bank/sets/{set_id}/writing/{part}/save",
+    response_model=WritingBuilderSaveResponse,
+)
+def save_bank_writing_route(
+    set_id: UUID,
+    part: int,
+    body: WritingBuilderSaveRequest,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> WritingBuilderSaveResponse:
+    return question_bank.save_bank_writing(
+        set_id=set_id, part=part, body=body, admin_id=admin.id
+    )
+
+
+@router.post("/question-bank/sets/{set_id}/writing/{part}/image")
+async def upload_bank_writing_image_route(
+    request: Request,
+    set_id: UUID,
+    part: int,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+    file: UploadFile = File(...),
+):
+    if part != 1:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Image upload is only supported for Writing Task 1.",
+        )
+    from app.db.supabase_client import get_supabase as _get_sb
+
+    _, skill = question_bank._load_set_skill(_get_sb(), str(set_id))  # noqa: SLF001
+    if skill != "writing":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Set is not a writing set.")
+
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > ADMIN_WRITING_IMAGE_MAX_BYTES:
+                raise HTTPException(
+                    status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Image file is too large.",
+                )
+        except ValueError:
+            pass
+    content = await file.read()
+    if len(content) > ADMIN_WRITING_IMAGE_MAX_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Image file is too large.",
+        )
+    if not content:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Empty image file.")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    ext = _WRITING_IMAGE_TYPES.get(content_type)
+    if not ext:
+        name = (file.filename or "").lower()
+        if name.endswith(".png"):
+            ext, content_type = "png", "image/png"
+        elif name.endswith(".webp"):
+            ext, content_type = "webp", "image/webp"
+        elif name.endswith(".gif"):
+            ext, content_type = "gif", "image/gif"
+        elif name.endswith(".jpg") or name.endswith(".jpeg"):
+            ext, content_type = "jpg", "image/jpeg"
+        else:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported image type. Use JPEG, PNG, WebP, or GIF.",
+            )
+
+    key = f"{question_bank.default_bank_writing_image_key(set_id=set_id, part=part)}.{ext}"
+    try:
+        upload_object(key=key, body=content, content_type=content_type)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    from app.admin.audit import log_admin_action
+
+    log_admin_action(
+        admin_id=admin.id,
+        action="question_bank.writing_image_upload",
+        resource_type="practice_set",
+        resource_id=set_id,
+        metadata={"part": part, "key": key},
+    )
+
+    preview_url = None
+    try:
+        from app.storage.r2 import generate_signed_url
+
+        preview_url = generate_signed_url(key)
+    except Exception:
+        preview_url = None
+
+    return {
+        "ok": True,
+        "image_url": key,
+        "image_preview_url": preview_url,
+        "image_name": key.split("/")[-1],
+    }
+
+
+@router.get(
+    "/question-bank/sets/{set_id}/speaking/{part}",
+    response_model=BankSpeakingPartResponse,
+)
+def load_bank_speaking_route(
+    set_id: UUID,
+    part: int,
+    _admin: Annotated[UserPublic, Depends(require_admin)],
+) -> BankSpeakingPartResponse:
+    return question_bank.load_bank_speaking(set_id=set_id, part=part)
+
+
+@router.post(
+    "/question-bank/sets/{set_id}/speaking/{part}/save",
+    response_model=SpeakingBuilderSaveResponse,
+)
+def save_bank_speaking_route(
+    set_id: UUID,
+    part: int,
+    body: SpeakingBuilderSaveRequest,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> SpeakingBuilderSaveResponse:
+    return question_bank.save_bank_speaking(
+        set_id=set_id, part=part, body=body, admin_id=admin.id
+    )
+
+
+@router.post("/question-bank/sets/{set_id}/speaking/{part}/video")
+async def upload_bank_speaking_video_route(
+    request: Request,
+    set_id: UUID,
+    part: int,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+    file: UploadFile = File(...),
+):
+    if part < 1 or part > 3:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Part must be 1–3.")
+    from app.db.supabase_client import get_supabase as _get_sb
+    from uuid import uuid4
+
+    _, skill = question_bank._load_set_skill(_get_sb(), str(set_id))  # noqa: SLF001
+    if skill != "speaking":
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="Set is not a speaking set."
+        )
+
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > ADMIN_SPEAKING_VIDEO_MAX_BYTES:
+                raise HTTPException(
+                    status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Video file is too large (max 40MB for 10–15s clips).",
+                )
+        except ValueError:
+            pass
+    content = await file.read()
+    if len(content) > ADMIN_SPEAKING_VIDEO_MAX_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Video file is too large (max 40MB for 10–15s clips).",
+        )
+    if not content:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Empty video file.")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    ext = _SPEAKING_VIDEO_TYPES.get(content_type)
+    if not ext:
+        name = (file.filename or "").lower()
+        if name.endswith(".mp4"):
+            ext, content_type = "mp4", "video/mp4"
+        elif name.endswith(".webm"):
+            ext, content_type = "webm", "video/webm"
+        elif name.endswith(".mov"):
+            ext, content_type = "mov", "video/quicktime"
+        else:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported video type. Use MP4, WebM, or MOV (10–15s).",
+            )
+
+    key = f"bank/{set_id}/speaking/part{part}/{uuid4().hex}.{ext}"
+    try:
+        upload_object(key=key, body=content, content_type=content_type)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    from app.admin.audit import log_admin_action
+
+    log_admin_action(
+        admin_id=admin.id,
+        action="question_bank.speaking_video_upload",
+        resource_type="practice_set",
+        resource_id=set_id,
+        metadata={"part": part, "key": key, "size_bytes": len(content)},
+    )
+
+    preview_url = None
+    try:
+        from app.storage.r2 import generate_signed_url
+
+        preview_url = generate_signed_url(key)
+    except Exception:
+        preview_url = None
+
+    return {
+        "ok": True,
+        "video_url": key,
+        "video_preview_url": preview_url,
+        "video_name": key.split("/")[-1],
+    }
+
+
 @router.post("/mocks/{mock_id}/ingest/validate", response_model=IngestValidateResponse)
 def validate_ingest_route(
     mock_id: UUID,
@@ -260,9 +657,6 @@ def listening_audio_status_route(
         "size_bytes": size_bytes,
         "part": part,
     }
-
-
-ADMIN_AUDIO_MAX_BYTES = 200 * 1024 * 1024
 
 
 @router.post("/mocks/{mock_id}/ingest/audio")

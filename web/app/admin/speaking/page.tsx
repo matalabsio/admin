@@ -7,10 +7,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function AdminSpeakingPage() {
+type Props = { searchParams: Promise<{ status?: string }> };
+
+export default async function AdminSpeakingPage({ searchParams }: Props) {
+  const sp = await searchParams;
   return (
     <AdminShell hidePageHeader>
-      <AdminSpeakingClient />
+      <AdminSpeakingClient initialStatus={sp.status} />
     </AdminShell>
   );
 }

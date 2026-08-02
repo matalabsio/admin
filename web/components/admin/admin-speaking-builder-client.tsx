@@ -14,6 +14,11 @@ import {
   adminApi,
   type SpeakingBuilderQuestion,
 } from "@/lib/admin-api";
+import {
+  type BuilderSource,
+  builderBackHref,
+  builderPartHref,
+} from "@/components/admin/admin-builder-source";
 import { AdminBuilderStickyBar } from "@/components/admin/admin-builder-sticky-bar";
 import {
   adminBtnPrimary,
@@ -25,7 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type Props = {
-  mockId: string;
+  source: BuilderSource;
   part: number;
 };
 
@@ -72,7 +77,7 @@ function parseMmSs(raw: string): number | null {
 
 const PARTS = [1, 2, 3] as const;
 
-export function AdminSpeakingBuilderClient({ mockId, part }: Props) {
+export function AdminSpeakingBuilderClient({ source, part }: Props) {
   const router = useRouter();
   const safePart = part >= 1 && part <= 3 ? part : 1;
 
@@ -97,19 +102,35 @@ export function AdminSpeakingBuilderClient({ mockId, part }: Props) {
     return `${n} question${n === 1 ? "" : "s"} · Part ${safePart}`;
   }, [questions.length, safePart]);
 
+  const backHref = builderBackHref(source);
+  const backLabel =
+    source.kind === "mock" ? "Back to test" : "Back to question bank";
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [res, mock] = await Promise.all([
-        adminApi.loadSpeakingPart(mockId, safePart),
-        adminApi.getMock(mockId).catch(() => null),
-      ]);
-      if (mock) {
-        const cat =
-          mock.catalog_number != null ? `Test ${mock.catalog_number}` : mock.title;
-        setMockLabel(`${cat} · Speaking`);
+      const res =
+        source.kind === "mock"
+          ? await adminApi.loadSpeakingPart(source.mockId, safePart)
+          : await adminApi.loadBankSpeakingPart(source.setId, safePart);
+
+      if (source.kind === "mock") {
+        const mock = await adminApi.getMock(source.mockId).catch(() => null);
+        if (mock) {
+          const cat =
+            mock.catalog_number != null
+              ? `Test ${mock.catalog_number}`
+              : mock.title;
+          setMockLabel(`${cat} · Speaking`);
+        }
+      } else {
+        const set = await adminApi.getQuestionBankSet(source.setId).catch(() => null);
+        if (set) {
+          setMockLabel(`${set.title} · Speaking`);
+        }
       }
+
       if (res.questions.length === 0) {
         setQuestions([defaultQuestion(safePart)]);
       } else {
@@ -125,7 +146,10 @@ export function AdminSpeakingBuilderClient({ mockId, part }: Props) {
             record_sec: q.record_sec ?? q.speak_time_sec ?? 120,
             video_url: q.video_url,
             video_preview_url: q.video_preview_url,
-            video_name: q.video_name,
+            video_name:
+              ("video_name" in q && q.video_name) ||
+              (q.video_url ? q.video_url.split("/").pop() : null) ||
+              null,
             localPreviewUrl: null,
           })),
         );
@@ -135,7 +159,7 @@ export function AdminSpeakingBuilderClient({ mockId, part }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [mockId, safePart]);
+  }, [source, safePart]);
 
   useEffect(() => {
     void load();
@@ -217,7 +241,10 @@ export function AdminSpeakingBuilderClient({ mockId, part }: Props) {
       video_name: file.name,
     });
     try {
-      const res = await adminApi.uploadSpeakingVideo(mockId, safePart, file);
+      const res =
+        source.kind === "mock"
+          ? await adminApi.uploadSpeakingVideo(source.mockId, safePart, file)
+          : await adminApi.uploadBankSpeakingVideo(source.setId, safePart, file);
       updateQuestion(localId, {
         video_url: res.video_url,
         video_preview_url: res.video_preview_url,
@@ -254,7 +281,7 @@ export function AdminSpeakingBuilderClient({ mockId, part }: Props) {
     setError(null);
     setSaveMsg(null);
     try {
-      await adminApi.saveSpeakingPart(mockId, safePart, {
+      const saveBody = {
         questions: questions.map((q) => ({
           prompt: q.prompt.trim(),
           speak_time_sec: q.speak_time_sec,
@@ -263,7 +290,12 @@ export function AdminSpeakingBuilderClient({ mockId, part }: Props) {
           record_sec: q.speak_time_sec,
           video_url: q.video_url,
         })),
-      });
+      };
+      if (source.kind === "mock") {
+        await adminApi.saveSpeakingPart(source.mockId, safePart, saveBody);
+      } else {
+        await adminApi.saveBankSpeakingPart(source.setId, safePart, saveBody);
+      }
       setSaveMsg(`Saved Part ${safePart} · ${questions.length} question(s).`);
       await load();
     } catch (e) {
@@ -345,14 +377,14 @@ export function AdminSpeakingBuilderClient({ mockId, part }: Props) {
   return (
     <div className="mx-auto max-w-[1100px] pb-28">
       <Link
-        href={`/admin/mocks/${mockId}`}
+        href={backHref}
         className={cn(
           "mb-5 inline-flex items-center gap-[7px] text-sm font-semibold text-teal",
           adminLink,
         )}
       >
         <ArrowLeft className="size-4" strokeWidth={2.2} />
-        Back to test
+        {backLabel}
       </Link>
 
       <div className="mb-6 flex flex-wrap items-end justify-between gap-5">
@@ -377,7 +409,9 @@ export function AdminSpeakingBuilderClient({ mockId, part }: Props) {
             <button
               key={p}
               type="button"
-              onClick={() => router.push(`/admin/mocks/${mockId}/speaking/${p}`)}
+              onClick={() =>
+                router.push(builderPartHref(source, "speaking", p))
+              }
               className={cn(
                 "rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
                 active
@@ -726,7 +760,7 @@ export function AdminSpeakingBuilderClient({ mockId, part }: Props) {
       ) : null}
 
       <AdminBuilderStickyBar
-        mockId={mockId}
+        source={source}
         activeModule="speaking"
         label={questionCountLabel}
         previewMode={previewMode}

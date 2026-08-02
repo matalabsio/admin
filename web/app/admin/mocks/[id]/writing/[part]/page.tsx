@@ -15,7 +15,10 @@ export default async function AdminWritingBuilderPage({ params }: Props) {
   const safePart = part === 2 ? 2 : 1;
   return (
     <AdminShell hidePageHeader>
-      <AdminWritingBuilderClient mockId={id} part={safePart} />
+      <AdminWritingBuilderClient
+        source={{ kind: "mock", mockId: id }}
+        part={safePart}
+      />
     </AdminShell>
   );
 }

@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ImagePlus, Trash2, X } from "lucide-react";
 import { adminApi } from "@/lib/admin-api";
+import {
+  type BuilderSource,
+  builderBackHref,
+  builderPartHref,
+} from "@/components/admin/admin-builder-source";
 import { AdminBuilderStickyBar } from "@/components/admin/admin-builder-sticky-bar";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import {
@@ -18,13 +23,13 @@ import {
 import { cn } from "@/lib/utils";
 
 type Props = {
-  mockId: string;
+  source: BuilderSource;
   part: number;
   taskCount?: number;
 };
 
 export function AdminWritingBuilderClient({
-  mockId,
+  source,
   part,
   taskCount = 2,
 }: Props) {
@@ -55,9 +60,14 @@ export function AdminWritingBuilderClient({
   const completionLabel = promptReady ? "Prompt added" : "No prompt";
   const displayImageSrc = localPreviewUrl || imagePreviewUrl;
 
+  const backHref = builderBackHref(source);
+  const backLabel =
+    source.kind === "mock" ? "← Back to test" : "← Back to question bank";
+
   const eyebrow = useMemo(
-    () => `Mock · Writing · Task ${safePart}`,
-    [safePart],
+    () =>
+      `${source.kind === "mock" ? "Mock" : "Question bank"} · Writing · Task ${safePart}`,
+    [safePart, source.kind],
   );
 
   const placeholder =
@@ -69,14 +79,21 @@ export function AdminWritingBuilderClient({
     setLoading(true);
     setError(null);
     try {
-      const res = await adminApi.loadWritingPart(mockId, safePart);
+      const res =
+        source.kind === "mock"
+          ? await adminApi.loadWritingPart(source.mockId, safePart)
+          : await adminApi.loadBankWritingPart(source.setId, safePart);
       setPrompt(res.prompt || "");
       setQuestionType(
         res.question_type || (safePart === 1 ? "task1_academic" : "task2"),
       );
       setOptions(res.options || {});
       setImageKey(res.image_url || "");
-      setImageName(res.image_name || "");
+      setImageName(
+        ("image_name" in res && res.image_name) ||
+          (res.image_url ? res.image_url.split("/").pop() : "") ||
+          "",
+      );
       setImagePreviewUrl(res.image_preview_url || null);
       setPendingFile(null);
       setLocalPreviewUrl((prev) => {
@@ -88,7 +105,7 @@ export function AdminWritingBuilderClient({
     } finally {
       setLoading(false);
     }
-  }, [mockId, safePart]);
+  }, [source, safePart]);
 
   useEffect(() => {
     void load();
@@ -139,7 +156,10 @@ export function AdminWritingBuilderClient({
     setError(null);
     setSaveMsg(null);
     try {
-      const res = await adminApi.uploadWritingImage(mockId, 1, pendingFile);
+      const res =
+        source.kind === "mock"
+          ? await adminApi.uploadWritingImage(source.mockId, 1, pendingFile)
+          : await adminApi.uploadBankWritingImage(source.setId, 1, pendingFile);
       setImageKey(res.image_url);
       setImageName(res.image_name || pendingFile.name);
       setImagePreviewUrl(res.image_preview_url || localPreviewUrl);
@@ -164,7 +184,10 @@ export function AdminWritingBuilderClient({
       // Upload pending local file before save if needed
       let key = imageKey.trim();
       if (safePart === 1 && pendingFile) {
-        const res = await adminApi.uploadWritingImage(mockId, 1, pendingFile);
+        const res =
+          source.kind === "mock"
+            ? await adminApi.uploadWritingImage(source.mockId, 1, pendingFile)
+            : await adminApi.uploadBankWritingImage(source.setId, 1, pendingFile);
         key = res.image_url;
         setImageKey(res.image_url);
         setImagePreviewUrl(res.image_preview_url || localPreviewUrl);
@@ -172,13 +195,17 @@ export function AdminWritingBuilderClient({
         setPendingFile(null);
       }
 
-      const res = await adminApi.saveWritingPart(mockId, safePart, {
+      const saveBody = {
         prompt: prompt.trim(),
         question_type: questionType,
         options,
         // Empty string clears Task 1 image; null leaves existing (Task 2)
         image_url: safePart === 1 ? key : null,
-      });
+      };
+      const res =
+        source.kind === "mock"
+          ? await adminApi.saveWritingPart(source.mockId, safePart, saveBody)
+          : await adminApi.saveBankWritingPart(source.setId, safePart, saveBody);
       setSaveMsg(`Saved Writing Task ${res.part}.`);
       await load();
     } catch (e) {
@@ -199,11 +226,8 @@ export function AdminWritingBuilderClient({
           eyebrow={eyebrow}
           title="Writing builder"
           actions={
-            <Link
-              href={`/admin/mocks/${mockId}`}
-              className={cn("text-sm", adminLink)}
-            >
-              ← Back to test
+            <Link href={backHref} className={cn("text-sm", adminLink)}>
+              {backLabel}
             </Link>
           }
         />
@@ -242,7 +266,7 @@ export function AdminWritingBuilderClient({
         </div>
 
         <AdminBuilderStickyBar
-          mockId={mockId}
+          source={source}
           activeModule="writing"
           label={completionLabel}
           previewMode
@@ -260,11 +284,8 @@ export function AdminWritingBuilderClient({
         eyebrow={eyebrow}
         title="Writing builder"
         actions={
-          <Link
-            href={`/admin/mocks/${mockId}`}
-            className={cn("text-sm", adminLink)}
-          >
-            ← Back to test
+          <Link href={backHref} className={cn("text-sm", adminLink)}>
+            {backLabel}
           </Link>
         }
       />
@@ -274,7 +295,7 @@ export function AdminWritingBuilderClient({
           {Array.from({ length: maxTasks }, (_, i) => i + 1).map((t) => (
             <Link
               key={t}
-              href={`/admin/mocks/${mockId}/writing/${t}`}
+              href={builderPartHref(source, "writing", t)}
               className={cn(
                 "rounded-full border-[1.5px] px-4 py-2 text-sm font-semibold transition-all",
                 t === safePart
@@ -389,7 +410,7 @@ export function AdminWritingBuilderClient({
       )}
 
       <AdminBuilderStickyBar
-        mockId={mockId}
+        source={source}
         activeModule="writing"
         label={completionLabel}
         previewMode={false}

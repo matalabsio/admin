@@ -23,9 +23,19 @@ function QueueSkeleton() {
   );
 }
 
-export function AdminSpeakingClient() {
+export function AdminSpeakingClient({
+  initialStatus,
+}: {
+  initialStatus?: string;
+}) {
+  const initial: SpeakingStatusFilter =
+    initialStatus === "pending" ||
+    initialStatus === "in_review" ||
+    initialStatus === "completed"
+      ? initialStatus
+      : "all";
   const [items, setItems] = useState<SpeakingReviewListItem[]>([]);
-  const [filter, setFilter] = useState<SpeakingStatusFilter>("all");
+  const [filter, setFilter] = useState<SpeakingStatusFilter>(initial);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);

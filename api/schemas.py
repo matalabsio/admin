@@ -182,6 +182,11 @@ class AdminUserOverview(BaseModel):
     speaking_reviews: list[AdminUserSpeakingReviewItem] = Field(default_factory=list)
 
 
+class MockPartCount(BaseModel):
+    part: int
+    question_count: int = 0
+
+
 class MockModuleSummary(BaseModel):
     module: str
     sequence_order: int
@@ -189,6 +194,7 @@ class MockModuleSummary(BaseModel):
     is_enabled: bool
     question_count: int = 0
     parts: list[int] = Field(default_factory=list)
+    part_counts: list[MockPartCount] = Field(default_factory=list)
 
 
 class AdminMockListItem(BaseModel):
@@ -890,3 +896,88 @@ class UpdateQuestionResponse(BaseModel):
 class DeleteQuestionResponse(BaseModel):
     ok: bool
     deleted_id: UUID
+
+
+# ---------------------------------------------------------------------------
+# Question Bank (standalone, linked to practice_sets)
+# ---------------------------------------------------------------------------
+
+
+class QuestionBankSectionSummary(BaseModel):
+    part: int
+    question_count: int = 0
+    has_content: bool = False
+
+
+class QuestionBankSetItem(BaseModel):
+    set_id: UUID
+    set_number: int
+    title: str
+    difficulty: str
+    bank_id: UUID
+    bank_number: int
+    bank_title: str
+    skill: str
+    hub_id: UUID | None = None
+    hub_slug: str | None = None
+    description: str | None = None
+    status: str = "draft"
+    is_custom: bool = False
+    created_at: datetime | None = None
+    sections: list[QuestionBankSectionSummary] = Field(default_factory=list)
+    total_questions: int = 0
+
+
+class QuestionBankListResponse(BaseModel):
+    skill: str
+    sets: list[QuestionBankSetItem] = Field(default_factory=list)
+
+
+class QuestionBankCreateSetRequest(BaseModel):
+    skill: str
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    status: Literal["draft", "published", "archived"] = "draft"
+
+
+class QuestionBankCreateSetResponse(BaseModel):
+    set_id: UUID
+    skill: str
+    title: str
+    hub_id: UUID
+    parts: int
+    bank_number: int
+    set_number: int
+    status: str
+
+
+class BankListeningPartResponse(BaseModel):
+    practice_set_id: UUID
+    part: int
+    audio_key: str | None = None
+    instructions: str | None = None
+    questions: list[ListeningBuilderQuestionOut] = Field(default_factory=list)
+
+
+class BankReadingPartResponse(BaseModel):
+    practice_set_id: UUID
+    part: int
+    passage_text: str = ""
+    questions: list[ReadingBuilderQuestionOut] = Field(default_factory=list)
+
+
+class BankWritingPartResponse(BaseModel):
+    practice_set_id: UUID
+    part: int
+    question_id: UUID | None = None
+    question_type: str = ""
+    prompt: str = ""
+    options: dict[str, Any] = Field(default_factory=dict)
+    image_url: str | None = None
+    image_preview_url: str | None = None
+
+
+class BankSpeakingPartResponse(BaseModel):
+    practice_set_id: UUID
+    part: int
+    questions: list[SpeakingBuilderQuestionOut] = Field(default_factory=list)

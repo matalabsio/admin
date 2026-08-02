@@ -15,7 +15,10 @@ export default async function AdminListeningBuilderPage({ params }: Props) {
   const safePart = Number.isFinite(part) && part >= 1 && part <= 4 ? part : 1;
   return (
     <AdminShell hidePageHeader>
-      <AdminListeningBuilderClient mockId={id} part={safePart} />
+      <AdminListeningBuilderClient
+        source={{ kind: "mock", mockId: id }}
+        part={safePart}
+      />
     </AdminShell>
   );
 }

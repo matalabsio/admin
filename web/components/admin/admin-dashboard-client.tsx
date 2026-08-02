@@ -248,21 +248,25 @@ export function AdminDashboardClient() {
         label: "listening",
         value: sumModuleQuestions(liveMocks, "listening"),
         color: "#00BCD4",
+        href: "/admin/question-bank/overview",
       },
       {
         label: "reading",
         value: sumModuleQuestions(liveMocks, "reading"),
         color: "#00BCD4",
+        href: "/admin/question-bank/overview",
       },
       {
         label: "writing",
         value: sumModuleQuestions(liveMocks, "writing"),
         color: "#00BCD4",
+        href: "/admin/question-bank/overview",
       },
       {
         label: "speaking",
         value: sumModuleQuestions(liveMocks, "speaking"),
         color: "#00BCD4",
+        href: "/admin/question-bank/overview",
       },
     ],
     [liveMocks],
@@ -387,6 +391,15 @@ export function AdminDashboardClient() {
             >
               Manage mocks
             </Link>
+            <Link
+              href="/admin/question-bank/overview"
+              className={cn(
+                adminBtnSecondary,
+                "w-full border-white/20 bg-white/10 text-white hover:bg-white/15 sm:w-auto",
+              )}
+            >
+              Question bank
+            </Link>
           </div>
         </div>
       </section>
@@ -401,6 +414,92 @@ export function AdminDashboardClient() {
         />
       ) : null}
 
+      {/* Question bank + Recent mocks — primary content cards */}
+      <section className="grid gap-4 lg:grid-cols-[1fr_1.25fr]">
+        <AdminChartCard
+          title="Question bank"
+          subtitle="Questions per module (live mocks)"
+          className="min-w-0"
+          headerExtra={
+            <Link
+              href="/admin/question-bank/overview"
+              className={adminLink}
+            >
+              View details
+            </Link>
+          }
+        >
+          <HorizontalBarChart items={moduleBars} />
+        </AdminChartCard>
+
+        <div className={cn(adminCard, "flex h-full min-w-0 flex-col")}>
+          <div className="mb-5 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-display text-[17px] font-bold text-navy">Recent mocks</h3>
+              <p className="mt-0.5 text-[12.5px] text-[#94A3B8]">Latest catalog entries</p>
+            </div>
+            <Link href="/admin/mocks" className={adminLink}>
+              View all
+            </Link>
+          </div>
+          {recentMocks.length === 0 ? (
+            <p className="py-8 text-center text-sm text-[#94A3B8]">
+              No mocks in catalog yet.
+            </p>
+          ) : (
+            <>
+              <div className="hidden items-center gap-3 border-b border-[#EDF1F6] pb-3 sm:flex">
+                <span className={cn(adminMutedLabel, "flex-1")}>Test name</span>
+                <span className={cn(adminMutedLabel, "w-16 text-right")}>Attempts</span>
+                <span className={cn(adminMutedLabel, "w-24 text-right")}>Status</span>
+              </div>
+              <ul className="divide-y divide-[#F1F4F8]">
+                {recentMocks.map((mock) => {
+                  const badge = mockStatusBadge(mock.status);
+                  const attempts = mock.attempt_count ?? 0;
+                  return (
+                    <li
+                      key={mock.id}
+                      className="flex items-center gap-3 py-3.5 first:pt-3.5 sm:first:pt-3.5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          href={`/admin/mocks/${mock.id}`}
+                          className="block truncate text-[13.5px] font-semibold text-navy hover:text-teal"
+                        >
+                          {mock.title}
+                        </Link>
+                        <span className="mt-0.5 block text-[11.5px] text-[#94A3B8]">
+                          {mockModuleLabel(mock)}
+                        </span>
+                      </div>
+                      <span className="hidden w-16 shrink-0 text-right font-mono text-[13px] tabular-nums text-[#5A6B82] sm:block">
+                        {attempts > 0 ? attempts.toLocaleString() : "—"}
+                      </span>
+                      <span className="flex shrink-0 justify-end sm:w-24">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-bold tracking-[0.04em]",
+                            badge.className,
+                          )}
+                        >
+                          <span
+                            className="size-[5px] rounded-full"
+                            style={{ backgroundColor: badge.dot }}
+                            aria-hidden
+                          />
+                          {badge.label}
+                        </span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </div>
+      </section>
+
       {/* KPI row */}
       <section
         className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3"
@@ -412,6 +511,7 @@ export function AdminDashboardClient() {
           hint="All registered accounts"
           Icon={Users}
           trendPct={metrics.users_trend_pct}
+          href="/admin/users"
         />
         <AdminKpiCard
           label="Active (7d)"
@@ -419,6 +519,7 @@ export function AdminDashboardClient() {
           hint="Unique logins this week"
           Icon={Activity}
           trendPct={metrics.users_trend_pct}
+          href="/admin/users?view=active7d"
         />
         <AdminKpiCard
           label="New signups"
@@ -426,6 +527,7 @@ export function AdminDashboardClient() {
           hint="Last 7 days"
           Icon={UserPlus}
           trendPct={metrics.signups_trend_pct}
+          href="/admin/users?view=signups7d"
         />
         <AdminKpiCard
           label="Mock attempts"
@@ -433,6 +535,7 @@ export function AdminDashboardClient() {
           hint="Last 7 days"
           Icon={ClipboardList}
           trendPct={metrics.mocks_trend_pct}
+          href="/admin/users?view=attempts"
         />
         <AdminKpiCard
           label="Speaking reviews"
@@ -441,7 +544,7 @@ export function AdminDashboardClient() {
           Icon={Mic}
           accent="amber"
           badge={speakingPending > 0 ? "Pending" : undefined}
-          href="/admin/speaking"
+          href="/admin/speaking?status=pending"
         />
         <AdminKpiCard
           label="Writing reviews"
@@ -450,7 +553,7 @@ export function AdminDashboardClient() {
           Icon={FileText}
           accent="amber"
           badge={writingPending > 0 ? "Pending" : undefined}
-          href="/admin/writing"
+          href="/admin/writing?status=pending"
         />
       </section>
 
@@ -553,84 +656,6 @@ export function AdminDashboardClient() {
                   </button>
                 </div>
               ) : null}
-            </>
-          )}
-        </div>
-      </section>
-
-      {/* Row 3 */}
-      <section className="grid gap-4 lg:grid-cols-[1fr_1.25fr]">
-        <AdminChartCard
-          title="Question bank"
-          subtitle="Questions per module (live mocks)"
-          className="min-w-0"
-        >
-          <HorizontalBarChart items={moduleBars} />
-        </AdminChartCard>
-
-        <div className={cn(adminCard, "flex h-full min-w-0 flex-col")}>
-          <div className="mb-5 flex items-start justify-between gap-3">
-            <div>
-              <h3 className="font-display text-[17px] font-bold text-navy">Recent mocks</h3>
-              <p className="mt-0.5 text-[12.5px] text-[#94A3B8]">Latest catalog entries</p>
-            </div>
-            <Link href="/admin/mocks" className={adminLink}>
-              View all
-            </Link>
-          </div>
-          {recentMocks.length === 0 ? (
-            <p className="py-8 text-center text-sm text-[#94A3B8]">
-              No mocks in catalog yet.
-            </p>
-          ) : (
-            <>
-              <div className="hidden items-center gap-3 border-b border-[#EDF1F6] pb-3 sm:flex">
-                <span className={cn(adminMutedLabel, "flex-1")}>Test name</span>
-                <span className={cn(adminMutedLabel, "w-16 text-right")}>Attempts</span>
-                <span className={cn(adminMutedLabel, "w-24 text-right")}>Status</span>
-              </div>
-              <ul className="divide-y divide-[#F1F4F8]">
-                {recentMocks.map((mock) => {
-                  const badge = mockStatusBadge(mock.status);
-                  const attempts = mock.attempt_count ?? 0;
-                  return (
-                    <li
-                      key={mock.id}
-                      className="flex items-center gap-3 py-3.5 first:pt-3.5 sm:first:pt-3.5"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <Link
-                          href={`/admin/mocks/${mock.id}`}
-                          className="block truncate text-[13.5px] font-semibold text-navy hover:text-teal"
-                        >
-                          {mock.title}
-                        </Link>
-                        <span className="mt-0.5 block text-[11.5px] text-[#94A3B8]">
-                          {mockModuleLabel(mock)}
-                        </span>
-                      </div>
-                      <span className="hidden w-16 shrink-0 text-right font-mono text-[13px] tabular-nums text-[#5A6B82] sm:block">
-                        {attempts > 0 ? attempts.toLocaleString() : "—"}
-                      </span>
-                      <span className="flex shrink-0 justify-end sm:w-24">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-bold tracking-[0.04em]",
-                            badge.className,
-                          )}
-                        >
-                          <span
-                            className="size-[5px] rounded-full"
-                            style={{ backgroundColor: badge.dot }}
-                            aria-hidden
-                          />
-                          {badge.label}
-                        </span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
             </>
           )}
         </div>

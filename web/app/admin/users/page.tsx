@@ -7,10 +7,13 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function AdminUsersPage() {
+type Props = { searchParams: Promise<{ view?: string }> };
+
+export default async function AdminUsersPage({ searchParams }: Props) {
+  const sp = await searchParams;
   return (
     <AdminShell hidePageHeader>
-      <AdminUsersClient />
+      <AdminUsersClient initialView={sp.view} />
     </AdminShell>
   );
 }

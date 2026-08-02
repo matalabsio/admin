@@ -23,9 +23,19 @@ function QueueSkeleton() {
   );
 }
 
-export function AdminWritingClient() {
+export function AdminWritingClient({
+  initialStatus,
+}: {
+  initialStatus?: string;
+}) {
+  const initial: WritingStatusFilter =
+    initialStatus === "pending" ||
+    initialStatus === "in_review" ||
+    initialStatus === "completed"
+      ? initialStatus
+      : "all";
   const [items, setItems] = useState<WritingReviewListItem[]>([]);
-  const [filter, setFilter] = useState<WritingStatusFilter>("all");
+  const [filter, setFilter] = useState<WritingStatusFilter>(initial);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);

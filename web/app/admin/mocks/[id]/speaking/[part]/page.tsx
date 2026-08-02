@@ -15,7 +15,10 @@ export default async function AdminSpeakingBuilderPartPage({ params }: Props) {
   const safePart = Number.isFinite(part) && part >= 1 && part <= 3 ? part : 1;
   return (
     <AdminShell hidePageHeader>
-      <AdminSpeakingBuilderClient mockId={id} part={safePart} />
+      <AdminSpeakingBuilderClient
+        source={{ kind: "mock", mockId: id }}
+        part={safePart}
+      />
     </AdminShell>
   );
 }

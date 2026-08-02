@@ -2,42 +2,24 @@
 
 import Link from "next/link";
 import { Eye, Pencil, Save } from "lucide-react";
+import {
+  type BuilderSkill,
+  type BuilderSource,
+  builderModuleHref,
+} from "@/components/admin/admin-builder-source";
 import { adminBtnPrimary } from "@/components/admin/admin-ui";
 import { cn } from "@/lib/utils";
 
-export type AdminBuilderModule =
-  | "listening"
-  | "reading"
-  | "writing"
-  | "speaking";
-
-const MODULES: { id: AdminBuilderModule; label: string; href: (mockId: string) => string }[] =
-  [
-    {
-      id: "listening",
-      label: "Listening",
-      href: (mockId) => `/admin/mocks/${mockId}/listening/1`,
-    },
-    {
-      id: "reading",
-      label: "Reading",
-      href: (mockId) => `/admin/mocks/${mockId}/reading/1`,
-    },
-    {
-      id: "writing",
-      label: "Writing",
-      href: (mockId) => `/admin/mocks/${mockId}/writing/1`,
-    },
-    {
-      id: "speaking",
-      label: "Speaking",
-      href: (mockId) => `/admin/mocks/${mockId}/speaking/1`,
-    },
-  ];
+const MODULES: { id: BuilderSkill; label: string }[] = [
+  { id: "listening", label: "Listening" },
+  { id: "reading", label: "Reading" },
+  { id: "writing", label: "Writing" },
+  { id: "speaking", label: "Speaking" },
+];
 
 type Props = {
-  mockId: string;
-  activeModule: AdminBuilderModule;
+  source: BuilderSource;
+  activeModule: BuilderSkill;
   label: string;
   previewMode: boolean;
   onTogglePreview: () => void;
@@ -48,7 +30,7 @@ type Props = {
 };
 
 export function AdminBuilderStickyBar({
-  mockId,
+  source,
   activeModule,
   label,
   previewMode,
@@ -58,6 +40,11 @@ export function AdminBuilderStickyBar({
   previewDisabled = false,
   saveDisabled = false,
 }: Props) {
+  const modules =
+    source.kind === "bank"
+      ? MODULES.filter((m) => m.id === source.skill)
+      : MODULES;
+
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-navy/95 px-4 py-3 backdrop-blur sm:px-8">
       <div className="mx-auto flex max-w-[1100px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -66,7 +53,7 @@ export function AdminBuilderStickyBar({
             aria-label="Module"
             className="flex flex-wrap items-center gap-1.5"
           >
-            {MODULES.map((mod, index) => {
+            {modules.map((mod, index) => {
               const active = mod.id === activeModule;
               return (
                 <span key={mod.id} className="flex items-center gap-1.5">
@@ -79,7 +66,7 @@ export function AdminBuilderStickyBar({
                     </span>
                   ) : null}
                   <Link
-                    href={mod.href(mockId)}
+                    href={builderModuleHref(source, mod.id)}
                     className={cn(
                       "rounded-full px-2.5 py-1 text-xs font-semibold transition-colors",
                       active

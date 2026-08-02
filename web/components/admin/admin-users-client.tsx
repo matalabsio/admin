@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
@@ -21,6 +22,19 @@ import { adminApi, type AdminUserListItem } from "@/lib/admin-api";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 25;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+export type UsersView = "all" | "active7d" | "signups7d" | "attempts";
+
+function normalizeView(raw?: string): UsersView {
+  if (raw === "active7d" || raw === "signups7d" || raw === "attempts") return raw;
+  return "all";
+}
+
+function isWithin7d(iso: string | null | undefined): boolean {
+  if (!iso) return false;
+  return Date.now() - new Date(iso).getTime() <= WEEK_MS;
+}
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -48,17 +62,54 @@ function formatRelative(iso: string | null | undefined): string {
   return formatDate(iso);
 }
 
-export function AdminUsersClient() {
+const VIEW_COPY: Record<UsersView, { title: string; subtitle: string }> = {
+  all: { title: "Users", subtitle: "All registered students" },
+  active7d: {
+    title: "Active users (7d)",
+    subtitle: "Unique accounts with activity in the last 7 days",
+  },
+  signups7d: {
+    title: "New signups (7d)",
+    subtitle: "Accounts created in the last 7 days",
+  },
+  attempts: {
+    title: "Mock attempts",
+    subtitle: "Students ranked by mock attempt count",
+  },
+};
+
+type Props = { initialView?: string };
+
+export function AdminUsersClient({ initialView }: Props) {
+  const router = useRouter();
+  const [view, setView] = useState<UsersView>(normalizeView(initialView));
   const [items, setItems] = useState<AdminUserListItem[]>([]);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  const [sort, setSort] = useState<"latest" | "active" | "band">("latest");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">(
+    "all",
+  );
+  const [sort, setSort] = useState<"latest" | "active" | "band" | "attempts">(
+    normalizeView(initialView) === "attempts" ? "attempts" : "latest",
+  );
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const copy = VIEW_COPY[view];
+
+  const selectView = (next: UsersView) => {
+    setView(next);
+    setPage(1);
+    if (next === "attempts") setSort("attempts");
+    else if (next === "active7d") setSort("active");
+    else setSort("latest");
+    const params = new URLSearchParams();
+    if (next !== "all") params.set("view", next);
+    const qs = params.toString();
+    router.replace(qs ? `/admin/users?${qs}` : "/admin/users", { scroll: false });
+  };
 
   const load = useCallback(async (search?: string, pageNum = 1) => {
     setLoading(true);
@@ -90,54 +141,88 @@ export function AdminUsersClient() {
   };
 
   const active7d = useMemo(
-    () =>
-      items.filter((u) => {
-        if (!u.last_activity_at) return false;
-        return Date.now() - new Date(u.last_activity_at).getTime() <= 7 * 24 * 60 * 60 * 1000;
-      }).length,
+    () => items.filter((u) => isWithin7d(u.last_activity_at)).length,
+    [items],
+  );
+
+  const signups7d = useMemo(
+    () => items.filter((u) => isWithin7d(u.created_at)).length,
     [items],
   );
 
   const shown = useMemo(() => {
     let rows = items.filter((u) =>
-      statusFilter === "all" ? true : statusFilter === "active" ? u.is_active : !u.is_active,
+      statusFilter === "all"
+        ? true
+        : statusFilter === "active"
+          ? u.is_active
+          : !u.is_active,
     );
+    if (view === "active7d") {
+      rows = rows.filter((u) => isWithin7d(u.last_activity_at));
+    } else if (view === "signups7d") {
+      rows = rows.filter((u) => isWithin7d(u.created_at));
+    } else if (view === "attempts") {
+      rows = rows.filter((u) => u.mock_attempt_count > 0);
+    }
     rows = [...rows].sort((a, b) => {
       if (sort === "band") return (b.best_band ?? -1) - (a.best_band ?? -1);
       if (sort === "active") {
         return (
-          new Date(b.last_activity_at ?? 0).getTime() - new Date(a.last_activity_at ?? 0).getTime()
+          new Date(b.last_activity_at ?? 0).getTime() -
+          new Date(a.last_activity_at ?? 0).getTime()
         );
+      }
+      if (sort === "attempts") {
+        return b.mock_attempt_count - a.mock_attempt_count;
       }
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
     return rows;
-  }, [items, sort, statusFilter]);
+  }, [items, sort, statusFilter, view]);
 
   return (
     <div className="space-y-4">
-      <AdminPageHeader eyebrow="Users" title="Users" subtitle="All registered students" />
+      <AdminPageHeader eyebrow="Users" title={copy.title} subtitle={copy.subtitle} />
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className={adminCard}>
-          <p className={adminMutedLabel}>Total</p>
-          <p className="mt-1 font-mono text-2xl font-medium text-navy">{total}</p>
-        </div>
-        <div className={adminCard}>
-          <p className={adminMutedLabel}>Active 7d</p>
-          <p className="mt-1 font-mono text-2xl font-medium text-navy">{active7d}</p>
-        </div>
-        <div className={adminCard}>
-          <p className={adminMutedLabel}>Mock attempts</p>
-          <p className="mt-1 font-mono text-2xl font-medium text-navy">
-            {items.reduce((s, u) => s + u.mock_attempt_count, 0)}
-          </p>
-        </div>
-        <div className={adminCard}>
-          <p className={adminMutedLabel}>Completed mocks</p>
-          <p className="mt-1 font-mono text-2xl font-medium text-navy">
-            {items.reduce((s, u) => s + u.completed_mock_count, 0)}
-          </p>
-        </div>
+        {(
+          [
+            { id: "all" as const, label: "Total", value: total },
+            { id: "active7d" as const, label: "Active 7d", value: active7d },
+            {
+              id: "attempts" as const,
+              label: "Mock attempts",
+              value: items.reduce((s, u) => s + u.mock_attempt_count, 0),
+            },
+            {
+              id: "signups7d" as const,
+              label: "New signups 7d",
+              value: signups7d,
+            },
+          ] as const
+        ).map((card) => {
+          const active = view === card.id;
+          return (
+            <button
+              key={card.id}
+              type="button"
+              onClick={() => selectView(card.id)}
+              className={cn(
+                adminCard,
+                "cursor-pointer text-left transition-colors",
+                active
+                  ? "border-cyan bg-cyan-soft/30 ring-2 ring-cyan/30"
+                  : "hover:border-cyan/40 hover:bg-cyan-soft/10",
+              )}
+              aria-pressed={active}
+            >
+              <p className={adminMutedLabel}>{card.label}</p>
+              <p className="mt-1 font-mono text-2xl font-medium text-navy tabular-nums">
+                {card.value}
+              </p>
+            </button>
+          );
+        })}
       </section>
       <form className={cn(adminCard, "space-y-3")} onSubmit={onSearch}>
         <label className="relative block">
@@ -175,6 +260,7 @@ export function AdminUsersClient() {
           >
             <option value="latest">Sort: Latest</option>
             <option value="active">Sort: Last active</option>
+            <option value="attempts">Sort: Attempts</option>
             <option value="band">Sort: Best band</option>
           </select>
         </div>
@@ -210,10 +296,16 @@ export function AdminUsersClient() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <span className={adminAvatar}>
-                        {(user.full_name?.slice(0, 2) || user.email?.slice(0, 2) || "ST").toUpperCase()}
+                        {(
+                          user.full_name?.slice(0, 2) ||
+                          user.email?.slice(0, 2) ||
+                          "ST"
+                        ).toUpperCase()}
                       </span>
                       <div>
-                        <p className="font-semibold text-navy">{user.full_name ?? "—"}</p>
+                        <p className="font-semibold text-navy">
+                          {user.full_name ?? "—"}
+                        </p>
                         <p className="text-xs text-[#5A6B82]">{user.email ?? "—"}</p>
                       </div>
                     </div>

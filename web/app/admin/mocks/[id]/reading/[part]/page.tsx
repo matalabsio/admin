@@ -15,7 +15,10 @@ export default async function AdminReadingBuilderPage({ params }: Props) {
   const safePart = Number.isFinite(part) && part >= 1 && part <= 4 ? part : 1;
   return (
     <AdminShell hidePageHeader>
-      <AdminReadingBuilderClient mockId={id} part={safePart} />
+      <AdminReadingBuilderClient
+        source={{ kind: "mock", mockId: id }}
+        part={safePart}
+      />
     </AdminShell>
   );
 }
