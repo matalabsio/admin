@@ -110,25 +110,25 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const res =
+      const partPromise =
         source.kind === "mock"
-          ? await adminApi.loadSpeakingPart(source.mockId, safePart)
-          : await adminApi.loadBankSpeakingPart(source.setId, safePart);
+          ? adminApi.loadSpeakingPart(source.mockId, safePart)
+          : adminApi.loadBankSpeakingPart(source.setId, safePart);
+      const metaPromise =
+        source.kind === "mock"
+          ? adminApi.getMock(source.mockId).catch(() => null)
+          : adminApi.getQuestionBankSet(source.setId).catch(() => null);
 
-      if (source.kind === "mock") {
-        const mock = await adminApi.getMock(source.mockId).catch(() => null);
-        if (mock) {
-          const cat =
-            mock.catalog_number != null
-              ? `Test ${mock.catalog_number}`
-              : mock.title;
-          setMockLabel(`${cat} · Speaking`);
-        }
-      } else {
-        const set = await adminApi.getQuestionBankSet(source.setId).catch(() => null);
-        if (set) {
-          setMockLabel(`${set.title} · Speaking`);
-        }
+      const [res, meta] = await Promise.all([partPromise, metaPromise]);
+
+      if (source.kind === "mock" && meta && "catalog_number" in meta) {
+        const cat =
+          meta.catalog_number != null
+            ? `Test ${meta.catalog_number}`
+            : meta.title;
+        setMockLabel(`${cat} · Speaking`);
+      } else if (meta && "title" in meta) {
+        setMockLabel(`${meta.title} · Speaking`);
       }
 
       if (res.questions.length === 0) {

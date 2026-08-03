@@ -1,59 +1,135 @@
-# ---------------------------------------------------------------------------
-# BandForge Admin .gitignore
-# ---------------------------------------------------------------------------
+# =============================================================================
+# BandForge Admin (Python API + Next.js web) — production-grade .gitignore
+# =============================================================================
 
-# Python bytecode
+# -----------------------------------------------------------------------------
+# Secrets & environment — NEVER commit real values
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env*.example
+web/.env
+web/.env.*
+!web/.env.example
+!web/.env*.example
+
+# Cloud / payment / TLS credential dumps
+*credentials*.json
+*service-account*.json
+*firebase-adminsdk*.json
+*.pem
+*.key
+*.p12
+*.pfx
+!**/fixtures/**/*.pem
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-
-# Virtual environments
+.Python
 .venv/
 venv/
+ENV/
+env/
+.python-version
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # Node / Next.js (admin/web)
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 web/node_modules/
 web/.next/
 web/out/
 web/.turbo/
+web/.vercel/
+node_modules/
+.pnpm-store/
 
-# ---------------------------------------------------------------------------
-# Environment & secrets
-# ---------------------------------------------------------------------------
-.env
-.env.*
-!.env.example
-web/.env
-web/.env.*
-!web/.env.example
+# -----------------------------------------------------------------------------
+# Testing, coverage, type checkers
+# -----------------------------------------------------------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage/
+.nyc_output/
+.mypy_cache/
+.ruff_cache/
+.cache/
+*.tsbuildinfo
+web/*.tsbuildinfo
 
-# ---------------------------------------------------------------------------
-# OS / IDE
-# ---------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Logs & debug
+# -----------------------------------------------------------------------------
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# -----------------------------------------------------------------------------
+# Local databases / dumps
+# -----------------------------------------------------------------------------
+*.db
+*.sqlite3
+*.sql.gz
+*.dump
+
+# -----------------------------------------------------------------------------
+# OS & editor
+# -----------------------------------------------------------------------------
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 *.swp
 *.swo
 *~
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
 
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
+# -----------------------------------------------------------------------------
+# Local agent / tooling artifacts
+# -----------------------------------------------------------------------------
+.cursor/
+.claude/
+.agents/
+.agent/
+.codex/
+.scratch/
+tmp/
+temp/
+*.local
+!*.example
 
-# ---------------------------------------------------------------------------
-# Testing / coverage
-# ---------------------------------------------------------------------------
-.pytest_cache/
-.coverage
-htmlcov/
-coverage/
-
-# TypeScript build info
-*.tsbuildinfo
-
-# Misc
-.vercel
+# -----------------------------------------------------------------------------
+# Deploy / misc
+# -----------------------------------------------------------------------------
+.vercel/
+web/.vercel/
+*.secret
+*.secrets
+secrets/
+.secrets/
+gitleaks-report.json
+trufflehog-report.json

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -19,11 +20,29 @@ import {
   AdminChartCard,
   HorizontalBarChart,
   MockCatalogCard,
-  UserGrowthChart,
-  WeeklyActivityChart,
   type BarItem,
   type CatalogModuleStat,
 } from "@/components/admin/admin-charts";
+
+const chartFallback = (
+  <div className="h-[220px] w-full animate-pulse rounded-md bg-[#F1F4F8] sm:h-[260px]" />
+);
+
+const WeeklyActivityChart = dynamic(
+  () =>
+    import("@/components/admin/admin-charts-recharts").then(
+      (m) => m.WeeklyActivityChart,
+    ),
+  { ssr: false, loading: () => chartFallback },
+);
+
+const UserGrowthChart = dynamic(
+  () =>
+    import("@/components/admin/admin-charts-recharts").then(
+      (m) => m.UserGrowthChart,
+    ),
+  { ssr: false, loading: () => chartFallback },
+);
 import { AdminCreateMockForm } from "@/components/admin/admin-create-mock-form";
 import { AdminKpiCard } from "@/components/admin/admin-kpi-card";
 import {

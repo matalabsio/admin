@@ -283,14 +283,16 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
       if (keyFromDb) {
         setAudioKey(keyFromDb);
         setAudioName(keyFromDb.split("/").pop() || keyFromDb);
-        await refreshAudioStatus(keyFromDb);
+        // R2 existence check is secondary — don't block the editor on it
+        void refreshAudioStatus(keyFromDb);
       } else {
         // Audio may already be in R2 from a prior upload before questions were saved
-        const ok = await refreshAudioStatus(expectedKey);
-        if (!ok) {
-          setAudioKey("");
-          setAudioName("");
-        }
+        void refreshAudioStatus(expectedKey).then((ok) => {
+          if (!ok) {
+            setAudioKey("");
+            setAudioName("");
+          }
+        });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");

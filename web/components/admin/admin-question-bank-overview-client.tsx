@@ -12,11 +12,13 @@ import {
 import {
   AdminChartCard,
   HorizontalBarChart,
-  ModuleDonutChart,
-  MockVsPracticeBarChart,
   type ChartSegment,
   type GroupedBarRow,
 } from "@/components/admin/admin-charts";
+import {
+  ModuleDonutChart,
+  MockVsPracticeBarChart,
+} from "@/components/admin/admin-charts-recharts";
 import { AdminKpiCard } from "@/components/admin/admin-kpi-card";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import {

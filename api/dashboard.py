@@ -449,13 +449,23 @@ def get_dashboard_overview() -> DashboardOverview:
     since_7d = (now - timedelta(days=7)).isoformat()
     since_14d = (now - timedelta(days=14)).isoformat()
 
-    counts = _fetch_counts(since_7d, since_14d)
-    metrics, weekly_activity = _build_metrics_core(
-        counts=counts,
-        since_7d=since_7d,
-        since_14d=since_14d,
+    def metrics_phase() -> tuple[DashboardMetrics, list[DailyActivityPoint]]:
+        counts = _fetch_counts(since_7d, since_14d)
+        return _build_metrics_core(
+            counts=counts,
+            since_7d=since_7d,
+            since_14d=since_14d,
+        )
+
+    # Recent feed is independent of KPI counts — overlap the two phases.
+    loaded = run_parallel(
+        {
+            "metrics": metrics_phase,
+            "recent": _fetch_recent_activity,
+        }
     )
-    recent_activity = _fetch_recent_activity()
+    metrics, weekly_activity = loaded["metrics"]
+    recent_activity = loaded["recent"]
 
     return DashboardOverview(
         metrics=metrics,

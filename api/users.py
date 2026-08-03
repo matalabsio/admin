@@ -154,17 +154,39 @@ def get_user_detail(user_id: UUID) -> AdminUserDetail:
 
 
 def list_user_attempts(user_id: UUID) -> list[AdminUserAttemptItem]:
+    from app.admin.parallel import run_parallel
+
     sb = get_supabase()
     uid = str(user_id)
 
-    mock_rows = (
-        sb.table("mock_attempts")
-        .select("id, mock_test_id, status, started_at, completed_at, mock_tests(title)")
-        .eq("user_id", uid)
-        .order("started_at", desc=True)
-        .limit(50)
-        .execute()
-    ).data or []
+    loaded = run_parallel(
+        {
+            "mock_rows": lambda: (
+                sb.table("mock_attempts")
+                .select(
+                    "id, mock_test_id, status, started_at, completed_at, mock_tests(title)"
+                )
+                .eq("user_id", uid)
+                .order("started_at", desc=True)
+                .limit(50)
+                .execute()
+            ).data
+            or [],
+            "module_rows": lambda: (
+                sb.table("test_attempts")
+                .select(
+                    "id, mock_test_id, module, status, started_at, completed_at, mock_tests(title)"
+                )
+                .eq("user_id", uid)
+                .order("started_at", desc=True)
+                .limit(50)
+                .execute()
+            ).data
+            or [],
+        }
+    )
+    mock_rows = loaded["mock_rows"]
+    module_rows = loaded["module_rows"]
 
     items: list[AdminUserAttemptItem] = []
     for row in mock_rows:
@@ -183,30 +205,27 @@ def list_user_attempts(user_id: UUID) -> list[AdminUserAttemptItem]:
             )
         )
 
-    module_rows = (
-        sb.table("test_attempts")
-        .select(
-            "id, mock_test_id, module, status, started_at, completed_at, mock_tests(title)"
-        )
-        .eq("user_id", uid)
-        .order("started_at", desc=True)
-        .limit(50)
-        .execute()
-    ).data or []
+    completed_ids = [
+        str(row["id"]) for row in module_rows if row.get("status") == "completed"
+    ]
+    band_by_attempt: dict[str, float] = {}
+    if completed_ids:
+        score_rows = (
+            sb.table("module_scores")
+            .select("attempt_id, band")
+            .in_("attempt_id", completed_ids)
+            .execute()
+        ).data or []
+        for score in score_rows:
+            aid = str(score.get("attempt_id") or "")
+            if not aid or aid in band_by_attempt:
+                continue
+            if score.get("band") is not None:
+                band_by_attempt[aid] = float(score["band"])
 
     for row in module_rows:
         mock_ref = row.get("mock_tests") or {}
-        band: float | None = None
-        if row.get("status") == "completed":
-            scores = (
-                sb.table("module_scores")
-                .select("band")
-                .eq("attempt_id", str(row["id"]))
-                .limit(1)
-                .execute()
-            ).data or []
-            if scores and scores[0].get("band") is not None:
-                band = float(scores[0]["band"])
+        band = band_by_attempt.get(str(row["id"]))
 
         items.append(
             AdminUserAttemptItem(

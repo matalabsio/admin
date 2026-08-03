@@ -129,21 +129,23 @@ export function AdminQuestionBankClient({
     setMocks(list);
   }, []);
 
-  const loadPractice = useCallback(async (nextSkill: Skill) => {
-    const res = await adminApi.listQuestionBank(nextSkill);
-    setSets(res.sets);
-  }, []);
-
-  const loadPracticeTotals = useCallback(async () => {
+  /** One fan-out for all skills: fills the active list + KPI totals (avoids duplicate fetch). */
+  const loadPracticeAll = useCallback(async (activeSkill: Skill) => {
     const results = await Promise.all(
       SKILLS.map(async (s) => {
         const res = await adminApi.listQuestionBank(s.value);
-        const total = res.sets.reduce((sum, set) => sum + set.total_questions, 0);
-        return [s.value, total] as const;
+        return { skill: s.value, sets: res.sets } as const;
       }),
     );
+    const active = results.find((r) => r.skill === activeSkill);
+    setSets(active?.sets ?? []);
     setPracticeTotals(
-      Object.fromEntries(results) as Record<Skill, number>,
+      Object.fromEntries(
+        results.map((r) => [
+          r.skill,
+          r.sets.reduce((sum, set) => sum + set.total_questions, 0),
+        ]),
+      ) as Record<Skill, number>,
     );
   }, []);
 
@@ -156,7 +158,7 @@ export function AdminQuestionBankClient({
         if (tab === "mocks") {
           await loadMocks();
         } else {
-          await loadPractice(skill);
+          await loadPracticeAll(skill);
         }
       } catch (e) {
         if (!cancelled) {
@@ -171,24 +173,7 @@ export function AdminQuestionBankClient({
     return () => {
       cancelled = true;
     };
-  }, [tab, skill, loadMocks, loadPractice]);
-
-  useEffect(() => {
-    if (tab !== "practice") return;
-    let cancelled = false;
-    (async () => {
-      try {
-        await loadPracticeTotals();
-      } catch {
-        if (!cancelled) {
-          /* totals are secondary; detail load surfaces primary errors */
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [tab, loadPracticeTotals]);
+  }, [tab, skill, loadMocks, loadPracticeAll]);
 
   const liveMocks = useMemo(() => liveMocksOnly(mocks), [mocks]);
 
