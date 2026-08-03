@@ -1370,11 +1370,19 @@ export const adminApi = {
     title: string;
     description?: string | null;
     status?: "draft" | "published" | "archived";
+    difficulty?: "easy" | "medium" | "hard";
   }) {
     return adminCall<QuestionBankCreateSetResponse>(`/question-bank/sets`, {
       method: "POST",
       body: JSON.stringify(body),
     });
+  },
+
+  deleteQuestionBankSet(setId: string) {
+    return adminCall<{ ok: boolean; deleted_id: string }>(
+      `/question-bank/sets/${setId}`,
+      { method: "DELETE" },
+    );
   },
 
   getQuestionBankSet(setId: string) {

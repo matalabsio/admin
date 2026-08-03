@@ -5,6 +5,8 @@ import {
   adminBtnPrimary,
   adminBtnSecondary,
   adminCard,
+  adminFilterPill,
+  adminFilterPillActive,
   adminHeading,
   adminInput,
   adminMutedLabel,
@@ -20,7 +22,14 @@ const SKILLS = [
   { value: "speaking", label: "Speaking", parts: "3 parts" },
 ] as const;
 
+const DIFFICULTIES = [
+  { value: "easy", label: "Easy" },
+  { value: "medium", label: "Medium" },
+  { value: "hard", label: "Hard" },
+] as const;
+
 type Skill = (typeof SKILLS)[number]["value"];
+type Difficulty = (typeof DIFFICULTIES)[number]["value"];
 
 type Props = {
   initialSkill: string;
@@ -34,6 +43,10 @@ function normalizeSkill(raw: string): Skill {
   return "listening";
 }
 
+function showsDifficulty(skill: Skill): boolean {
+  return skill === "listening" || skill === "reading";
+}
+
 export function AdminCreateQuestionBankSetForm({
   initialSkill,
   onCreated,
@@ -45,10 +58,19 @@ export function AdminCreateQuestionBankSetForm({
   const [status, setStatus] = useState<"draft" | "published" | "archived">(
     "draft",
   );
+  const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const skillMeta = SKILLS.find((s) => s.value === skill) ?? SKILLS[0];
+  const difficultyVisible = showsDifficulty(skill);
+
+  const selectSkill = (next: Skill) => {
+    setSkill(next);
+    if (!showsDifficulty(next)) {
+      setDifficulty("medium");
+    }
+  };
 
   const submit = async () => {
     if (!title.trim()) {
@@ -63,6 +85,7 @@ export function AdminCreateQuestionBankSetForm({
         title: title.trim(),
         description: description.trim() || undefined,
         status,
+        difficulty: difficultyVisible ? difficulty : "medium",
       });
       onCreated({ set_id: String(created.set_id), skill: created.skill });
     } catch (e) {
@@ -95,9 +118,9 @@ export function AdminCreateQuestionBankSetForm({
               <button
                 key={s.value}
                 type="button"
-                onClick={() => setSkill(s.value)}
+                onClick={() => selectSkill(s.value)}
                 className={cn(
-                  "rounded-[12px] border px-3 py-3 text-left transition-colors",
+                  "cursor-pointer rounded-[12px] border px-3 py-3 text-left transition-colors",
                   active
                     ? "border-cyan bg-cyan-soft/40 ring-2 ring-cyan/25"
                     : "border-[#E4E9F0] bg-white hover:border-cyan/40",
@@ -130,6 +153,44 @@ export function AdminCreateQuestionBankSetForm({
             autoFocus
           />
         </div>
+
+        {difficultyVisible ? (
+          <fieldset>
+            <legend className={adminMutedLabel}>Difficulty</legend>
+            <p className={cn(adminSubtext, "mt-1 mb-2 text-[12.5px]")}>
+              Used for Listening and Reading sets in personalized plan hubs.
+            </p>
+            <div
+              className="flex flex-wrap gap-2"
+              role="radiogroup"
+              aria-label="Difficulty"
+            >
+              {DIFFICULTIES.map((d) => {
+                const active = difficulty === d.value;
+                return (
+                  <label
+                    key={d.value}
+                    className={cn(
+                      adminFilterPill,
+                      "cursor-pointer gap-2",
+                      active && adminFilterPillActive,
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="qb-set-difficulty"
+                      value={d.value}
+                      checked={active}
+                      onChange={() => setDifficulty(d.value)}
+                      className="size-3.5 accent-navy"
+                    />
+                    {d.label}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+        ) : null}
 
         <div>
           <label htmlFor="qb-set-description" className={adminMutedLabel}>

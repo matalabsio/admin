@@ -938,6 +938,7 @@ class QuestionBankCreateSetRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     status: Literal["draft", "published", "archived"] = "draft"
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
 
 
 class QuestionBankCreateSetResponse(BaseModel):
@@ -949,6 +950,11 @@ class QuestionBankCreateSetResponse(BaseModel):
     bank_number: int
     set_number: int
     status: str
+
+
+class DeleteQuestionBankSetResponse(BaseModel):
+    ok: bool
+    deleted_id: UUID
 
 
 class BankListeningPartResponse(BaseModel):

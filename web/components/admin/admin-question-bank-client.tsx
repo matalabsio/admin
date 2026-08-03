@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Library } from "lucide-react";
+import { ChevronDown, ChevronRight, Library, Trash2 } from "lucide-react";
 import {
   adminApi,
   type AdminMockListItem,
   type QuestionBankSetItem,
 } from "@/lib/admin-api";
 import { AdminCreateQuestionBankSetForm } from "@/components/admin/admin-create-question-bank-set-form";
+import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import {
   adminBtnPrimary,
@@ -89,6 +90,10 @@ export function AdminQuestionBankClient({
   );
   const [expandedSetIds, setExpandedSetIds] = useState<Record<string, boolean>>(
     {},
+  );
+  const [deletingSetId, setDeletingSetId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<QuestionBankSetItem | null>(
+    null,
   );
 
   const syncUrl = useCallback(
@@ -240,8 +245,51 @@ export function AdminQuestionBankClient({
     setExpandedSetIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const requestDeleteCustomSet = (item: QuestionBankSetItem) => {
+    const isCustom = item.is_custom || item.bank_number === 5;
+    if (!isCustom || deletingSetId) return;
+    setPendingDelete(item);
+  };
+
+  const confirmDeleteCustomSet = async () => {
+    const item = pendingDelete;
+    if (!item) return;
+    setDeletingSetId(item.set_id);
+    setError(null);
+    try {
+      await adminApi.deleteQuestionBankSet(item.set_id);
+      setSets((prev) => prev.filter((s) => s.set_id !== item.set_id));
+      setPracticeTotals((prev) => ({
+        ...prev,
+        [skill]: Math.max(0, (prev[skill] ?? 0) - item.total_questions),
+      }));
+      setPendingDelete(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete practice set");
+    } finally {
+      setDeletingSetId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      <AdminConfirmDialog
+        open={pendingDelete != null}
+        tone="danger"
+        title={
+          pendingDelete
+            ? `Delete “${pendingDelete.title}”?`
+            : "Delete practice set?"
+        }
+        description="This removes the set, hub, and all bank questions. This cannot be undone."
+        confirmLabel="Delete set"
+        cancelLabel="Keep set"
+        busy={Boolean(pendingDelete && deletingSetId === pendingDelete.set_id)}
+        onCancel={() => {
+          if (!deletingSetId) setPendingDelete(null);
+        }}
+        onConfirm={() => void confirmDeleteCustomSet()}
+      />
       <AdminPageHeader
         title="Question bank"
         subtitle="Build reusable L / R / W / S practice sets section-by-section (same builders as mocks) and serve them to students via personalized plans."
@@ -530,16 +578,33 @@ export function AdminQuestionBankClient({
                         </span>
                       </span>
                     </button>
-                    <Link
-                      href={`/admin/question-bank/${skill}/${item.set_id}/1`}
-                      className={cn(
-                        adminBtnPrimary,
-                        "inline-flex items-center gap-1 text-sm",
-                      )}
-                    >
-                      Edit part 1
-                      <ChevronRight className="size-4" />
-                    </Link>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      {isCustom ? (
+                        <button
+                          type="button"
+                          onClick={() => requestDeleteCustomSet(item)}
+                          disabled={deletingSetId === item.set_id}
+                          className={cn(
+                            adminBtnSecondary,
+                            "inline-flex items-center gap-1.5 border-rose-200 px-3 py-2 text-sm text-rose-700 hover:bg-rose-50",
+                          )}
+                          aria-label={`Delete ${item.title}`}
+                        >
+                          <Trash2 className="size-3.5" aria-hidden />
+                          {deletingSetId === item.set_id ? "Deleting…" : "Delete"}
+                        </button>
+                      ) : null}
+                      <Link
+                        href={`/admin/question-bank/${skill}/${item.set_id}/1`}
+                        className={cn(
+                          adminBtnPrimary,
+                          "inline-flex items-center gap-1 text-sm",
+                        )}
+                      >
+                        Edit part 1
+                        <ChevronRight className="size-4" />
+                      </Link>
+                    </div>
                   </div>
                   {open ? (
                     <div className="flex flex-wrap gap-2 border-t border-[#EDF1F6] px-4 py-3">

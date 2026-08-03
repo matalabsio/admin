@@ -70,6 +70,7 @@ from app.admin.schemas import (
     QuestionBankCreateSetRequest,
     QuestionBankCreateSetResponse,
     QuestionBankSetItem,
+    DeleteQuestionBankSetResponse,
     BankListeningPartResponse,
     BankReadingPartResponse,
     BankWritingPartResponse,
@@ -262,6 +263,23 @@ def get_question_bank_set_route(
     _admin: Annotated[UserPublic, Depends(require_admin)],
 ) -> QuestionBankSetItem:
     return question_bank.get_question_bank_set(set_id=set_id)
+
+
+@router.delete(
+    "/question-bank/sets/{set_id}",
+    response_model=DeleteQuestionBankSetResponse,
+)
+def delete_question_bank_set_route(
+    set_id: UUID,
+    admin: Annotated[UserPublic, Depends(require_admin)],
+) -> DeleteQuestionBankSetResponse:
+    result = question_bank.delete_question_bank_set(
+        set_id=set_id, admin_id=admin.id
+    )
+    return DeleteQuestionBankSetResponse(
+        ok=bool(result.get("ok")),
+        deleted_id=UUID(str(result["deleted_id"])),
+    )
 
 
 @router.get(

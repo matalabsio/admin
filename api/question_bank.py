@@ -419,6 +419,7 @@ def create_question_bank_set(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "title is required.")
     description = (body.description or "").strip() or None
     status_val = body.status
+    difficulty = body.difficulty
 
     sb = get_supabase()
     banks = (
@@ -468,7 +469,7 @@ def create_question_bank_set(
                 "bank_id": bank_id,
                 "set_number": next_set,
                 "title": title,
-                "difficulty": "medium",
+                "difficulty": difficulty,
                 "description": description,
                 "status": status_val,
                 "created_by": str(admin_id),
@@ -522,6 +523,7 @@ def create_question_bank_set(
         metadata={
             "skill": skill,
             "title": title,
+            "difficulty": difficulty,
             "bank_number": CUSTOM_BANK_NUMBER,
             "set_number": next_set,
             "hub_id": hub_id,
@@ -537,6 +539,50 @@ def create_question_bank_set(
         set_number=next_set,
         status=status_val,
     )
+
+
+def delete_question_bank_set(
+    *,
+    set_id: UUID,
+    admin_id: UUID,
+) -> dict[str, Any]:
+    """Delete a custom (bank 5) practice set. Seeded catalogue sets are protected."""
+    sb = get_supabase()
+    row, skill = _load_set_skill(sb, str(set_id))
+    bank = row.get("practice_banks") or {}
+    if isinstance(bank, list):
+        bank = bank[0] if bank else {}
+    bank_number = int(bank.get("bank_number") or 0)
+    if bank_number != CUSTOM_BANK_NUMBER:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Only custom practice sets can be deleted. Archive seeded catalogue sets instead.",
+        )
+
+    title = str(row.get("title") or "")
+    set_number = int(row.get("set_number") or 0)
+    sb.table("practice_sets").delete().eq("id", str(set_id)).execute()
+
+    try:
+        from app.practice.catalog import clear_hub_catalog_cache
+
+        clear_hub_catalog_cache()
+    except Exception:
+        pass
+
+    log_admin_action(
+        admin_id=admin_id,
+        action="question_bank.set_delete",
+        resource_type="practice_set",
+        resource_id=set_id,
+        metadata={
+            "skill": skill,
+            "title": title,
+            "bank_number": bank_number,
+            "set_number": set_number,
+        },
+    )
+    return {"ok": True, "deleted_id": set_id}
 
 
 def _is_choose_two(q_type_ui: str, correct: str, options: list | None) -> bool:
