@@ -22,13 +22,13 @@
 
 3. **Create environment file**
 
-   Copy the example and adjust values if needed:
+   Copy the example from `web/` and adjust values if needed:
 
    ```bash
-   cp .env.example .env.local
+   cp web/.env.example web/.env.local
    ```
 
-   Default contents:
+   Default contents (see [`web/.env.example`](./web/.env.example)):
 
    | Variable | Default | Purpose |
    |----------|---------|---------|
@@ -50,9 +50,12 @@
    The admin expects the FastAPI backend running at port 8000:
 
    ```bash
-   cd ../../backend
+   cd ../backend
+   source .venv/bin/activate
    uvicorn app.main:app --host 127.0.0.1 --port 8000
    ```
+
+For production Vercel deploy, see **[VERCEL_DEPLOY.md](./VERCEL_DEPLOY.md)**.
 
 ## Common Issues
 

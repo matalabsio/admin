@@ -25,6 +25,14 @@ Browser (admin/web :3001)
   → Supabase / R2 / Redis
 ```
 
+## Production (Vercel)
+
+Deploy the Next.js admin UI to Vercel against the existing Railway FastAPI backend. Full steps (env vars, CORS, bootstrap, smoke tests, troubleshooting):
+
+→ **[VERCEL_DEPLOY.md](./VERCEL_DEPLOY.md)**
+
+Root Directory on Vercel must be `admin/web`. Python admin API is **not** hosted on Vercel.
+
 ## Local development
 
 ### 1. Backend (unchanged)
