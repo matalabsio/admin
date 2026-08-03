@@ -443,7 +443,8 @@ export function AdminUserDetailClient({ userId }: Props) {
               ) : (
                 <div className="overflow-x-auto">
                   <div className="min-w-[640px]">
-                    <div className="grid grid-cols-[1.7fr_1fr_0.5fr_0.5fr_0.5fr_0.5fr_0.8fr_1fr] items-center gap-[10px] border-b border-[#EDF1F6] px-[22px] py-[13px] font-mono text-[10px] uppercase tracking-[0.08em] text-[#94A3B8]">
+                    <div className="grid grid-cols-[0.35fr_1.7fr_1fr_0.5fr_0.5fr_0.5fr_0.5fr_0.8fr_1fr] items-center gap-[10px] border-b border-[#EDF1F6] px-[22px] py-[13px] font-mono text-[10px] uppercase tracking-[0.08em] text-[#94A3B8]">
+                      <span className="text-right">#</span>
                       <span>Test</span>
                       <span>Date</span>
                       <span className="text-center">L</span>
@@ -453,11 +454,14 @@ export function AdminUserDetailClient({ userId }: Props) {
                       <span className="text-center">Overall</span>
                       <span className="text-right">Status</span>
                     </div>
-                    {mockSessions.map((s) => (
+                    {mockSessions.map((s, index) => (
                       <div
                         key={s.mock_attempt_id}
-                        className="grid grid-cols-[1.7fr_1fr_0.5fr_0.5fr_0.5fr_0.5fr_0.8fr_1fr] items-center gap-[10px] border-b border-[#F1F4F8] px-[22px] py-[14px] last:border-b-0"
+                        className="grid grid-cols-[0.35fr_1.7fr_1fr_0.5fr_0.5fr_0.5fr_0.5fr_0.8fr_1fr] items-center gap-[10px] border-b border-[#F1F4F8] px-[22px] py-[14px] last:border-b-0"
                       >
+                        <span className="text-right font-mono text-xs tabular-nums text-[#94A3B8]">
+                          {index + 1}
+                        </span>
                         <span className="text-[13.5px] font-semibold text-navy">
                           {s.mock_title ?? `Test ${s.catalog_number ?? ""}`.trim()}
                         </span>
@@ -481,17 +485,21 @@ export function AdminUserDetailClient({ userId }: Props) {
               ) : (
                 <div className="overflow-x-auto">
                   <div className="min-w-[480px]">
-                    <div className="grid grid-cols-[2fr_1fr_0.8fr_1fr] items-center gap-3 border-b border-[#EDF1F6] px-[22px] py-[13px] font-mono text-[10px] uppercase tracking-[0.08em] text-[#94A3B8]">
+                    <div className="grid grid-cols-[0.35fr_2fr_1fr_0.8fr_1fr] items-center gap-3 border-b border-[#EDF1F6] px-[22px] py-[13px] font-mono text-[10px] uppercase tracking-[0.08em] text-[#94A3B8]">
+                      <span className="text-right">#</span>
                       <span>Task</span>
                       <span>Date</span>
                       <span className="text-center">Band</span>
                       <span className="text-right">Status</span>
                     </div>
-                    {writingRows.map((row) => (
+                    {writingRows.map((row, index) => (
                       <div
                         key={row.id}
-                        className="grid grid-cols-[2fr_1fr_0.8fr_1fr] items-center gap-3 border-b border-[#F1F4F8] px-[22px] py-[14px] last:border-b-0"
+                        className="grid grid-cols-[0.35fr_2fr_1fr_0.8fr_1fr] items-center gap-3 border-b border-[#F1F4F8] px-[22px] py-[14px] last:border-b-0"
                       >
+                        <span className="text-right font-mono text-xs tabular-nums text-[#94A3B8]">
+                          {index + 1}
+                        </span>
                         <span className="text-[13.5px] font-semibold text-navy">
                           {row.mock_title ?? `Test ${row.catalog_number ?? ""}`.trim()} — Writing
                         </span>
@@ -515,18 +523,22 @@ export function AdminUserDetailClient({ userId }: Props) {
             ) : (
               <div className="overflow-x-auto">
                 <div className="min-w-[480px]">
-                  <div className="grid grid-cols-[2fr_1fr_0.8fr_1fr] items-center gap-3 border-b border-[#EDF1F6] px-[22px] py-[13px] font-mono text-[10px] uppercase tracking-[0.08em] text-[#94A3B8]">
+                  <div className="grid grid-cols-[0.35fr_2fr_1fr_0.8fr_1fr] items-center gap-3 border-b border-[#EDF1F6] px-[22px] py-[13px] font-mono text-[10px] uppercase tracking-[0.08em] text-[#94A3B8]">
+                    <span className="text-right">#</span>
                     <span>Mock</span>
                     <span>Date</span>
                     <span className="text-center">Band</span>
                     <span className="text-right">Status</span>
                   </div>
-                  {overview.speaking_reviews.map((row) => (
+                  {overview.speaking_reviews.map((row, index) => (
                     <Link
                       key={row.id}
                       href={`/admin/speaking/${row.id}`}
-                      className="grid grid-cols-[2fr_1fr_0.8fr_1fr] items-center gap-3 border-b border-[#F1F4F8] px-[22px] py-[14px] transition-colors last:border-b-0 hover:bg-[#FBFCFE]"
+                      className="grid grid-cols-[0.35fr_2fr_1fr_0.8fr_1fr] items-center gap-3 border-b border-[#F1F4F8] px-[22px] py-[14px] transition-colors last:border-b-0 hover:bg-[#FBFCFE]"
                     >
+                      <span className="text-right font-mono text-xs tabular-nums text-[#94A3B8]">
+                        {index + 1}
+                      </span>
                       <span className="text-[13.5px] font-semibold text-navy">
                         {row.mock_title ?? "Speaking submission"}
                       </span>

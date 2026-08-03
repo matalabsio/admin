@@ -8,7 +8,8 @@ import sys
 from pathlib import Path
 from uuid import UUID
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# app.* lives in backend/ (this file is under admin/scripts/)
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
 
 from app.auth.security import hash_password
 from app.auth.utils import utcnow

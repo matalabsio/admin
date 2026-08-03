@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { adminAvatar, adminCard, adminFilterPill, adminFilterPillActive, adminLink, adminMeta, adminStatusBadgeStyles, adminTable, adminTableHead } from "@/components/admin/admin-ui";
+import { adminAvatar, adminCard, adminFilterPill, adminFilterPillActive, adminLink, adminMeta, adminSrNo, adminSrTd, adminSrTh, adminStatusBadgeStyles, adminTable, adminTableHead } from "@/components/admin/admin-ui";
 import type { SpeakingReviewListItem } from "@/lib/admin-api";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +53,7 @@ type Props = {
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  pageSize?: number;
 };
 
 export function EvaluatorQueueList({
@@ -62,6 +63,7 @@ export function EvaluatorQueueList({
   page,
   totalPages,
   onPageChange,
+  pageSize = 25,
 }: Props) {
   return (
     <div className="space-y-4">
@@ -120,6 +122,7 @@ export function EvaluatorQueueList({
             <table className="w-full min-w-[720px] text-left text-sm text-ink">
               <thead className={adminTableHead}>
                 <tr>
+                  <th className={adminSrTh}>#</th>
                   <th className="px-4 py-3">Student</th>
                   <th className="px-4 py-3">Submitted</th>
                   <th className="px-4 py-3">Status</th>
@@ -128,8 +131,9 @@ export function EvaluatorQueueList({
                 </tr>
               </thead>
               <tbody>
-                {items.map((row) => (
+                {items.map((row, index) => (
                   <tr key={row.id} className="border-t border-border">
+                    <td className={adminSrTd}>{adminSrNo(page, index, pageSize)}</td>
                     <td className="px-4 py-3 font-medium">
                       <div className="flex items-center gap-2">
                         <span className={cn(adminAvatar, "size-8 text-xs")}>

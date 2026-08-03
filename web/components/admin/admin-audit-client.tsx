@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { adminTable, adminTableHead } from "@/components/admin/admin-ui";
+import {
+  adminSrNo,
+  adminSrTd,
+  adminSrTh,
+  adminTable,
+  adminTableHead,
+} from "@/components/admin/admin-ui";
 import { adminApi, type AuditLogItem } from "@/lib/admin-api";
 
 export function AdminAuditClient() {
@@ -34,6 +40,7 @@ export function AdminAuditClient() {
       <table className="w-full text-left text-sm text-black">
         <thead className={adminTableHead}>
           <tr>
+            <th className={adminSrTh}>#</th>
             <th className="px-4 py-3">Time</th>
             <th className="px-4 py-3">Admin</th>
             <th className="px-4 py-3">Action</th>
@@ -43,13 +50,14 @@ export function AdminAuditClient() {
         <tbody>
           {items.length === 0 ? (
             <tr>
-              <td colSpan={4} className="px-4 py-8 text-center text-gray-600">
+              <td colSpan={5} className="px-4 py-8 text-center text-gray-600">
                 No audit entries
               </td>
             </tr>
           ) : (
-            items.map((row) => (
+            items.map((row, index) => (
               <tr key={row.id} className="border-t border-border">
+                <td className={adminSrTd}>{adminSrNo(1, index)}</td>
                 <td className="px-4 py-3 text-xs whitespace-nowrap text-gray-600">
                   {new Date(row.created_at).toLocaleString()}
                 </td>

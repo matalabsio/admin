@@ -1,134 +1,110 @@
-# Production — Admin on Vercel + Railway API
+# Admin deployment on Vercel — step by step
 
-Deploy the BandForge **admin UI** (`admin/web`) to Vercel. The admin **API** stays on the existing FastAPI backend on Railway (Python under `admin/api` is mounted by `backend/`, not a separate Vercel service).
+Deploy the BandForge **admin UI** to Vercel. The admin **API** stays on Railway (FastAPI in `backend/`, code under `admin/api`).
 
-| Layer | Host | Path |
-|-------|------|------|
-| Admin UI + BFF | **Vercel** | `admin/web` |
-| Admin + student API | **Railway** | `backend/` (includes `admin/api` via symlink) |
+| Layer | Host | Source |
+|-------|------|--------|
+| Admin UI + BFF | **Vercel** | [`matalabsio/admin`](https://github.com/matalabsio/admin) → folder `web/` |
+| Admin + student API | **Railway** | [`matalabsio/backend`](https://github.com/matalabsio/backend) |
 | Data / media | Supabase, R2, Redis | via Railway only |
 
-**Related:** [README.md](./README.md) · [LOCAL_SETUP.md](./LOCAL_SETUP.md) · student Vercel guide in `test/BandForge Brand/docs/vercel-production.md`
+Student app (separate): [`matalabsio/frontend`](https://github.com/matalabsio/frontend) → currently `https://frontend-chi-ebon-lxy95up4j4.vercel.app`
 
 ---
 
-## How traffic flows
-
-The browser only talks to **Vercel**. Next.js route handlers proxy to **Railway**. Session cookies are set on the **admin Vercel host** by the BFF — the browser does not need CORS to Railway for normal admin use.
+## Architecture (what talks to what)
 
 ```text
 Browser  →  https://<admin>.vercel.app
          →  /api/auth/*   (Next BFF)  →  Railway /auth/*
          →  /api/admin/*  (Next BFF)  →  Railway /admin/*
-         →  Supabase / R2 / Redis
 ```
 
-Cookies (host-only on the admin origin):
-
-- `bf_access` — httpOnly JWT (~15 min)
-- `bf_refresh` — httpOnly refresh (~30 days)
-- `bf_has_session` — non-httpOnly hint for client JS
-
-In production, cookies use `Secure` + `SameSite=lax` (no shared `Domain` with the student app).
+- Browser only talks to **Vercel**.
+- Cookies (`bf_access`, `bf_refresh`) are set on the **admin Vercel host**.
+- Admin login is **email/password** at `/admin/login` (not Google).
 
 ---
 
 ## Prerequisites
 
-- [ ] Node.js ≥ 18 (local builds / scripts only)
-- [ ] Railway backend already live — `curl` health succeeds
-- [ ] Same Supabase project the student app uses
-- [ ] An allowlisted admin user (email matches `ADMIN_ALLOWED_EMAIL`, role `admin` or `super_admin`)
+- [ ] Railway backend is live
+- [ ] You can open GitHub repo `matalabsio/admin`
+- [ ] You know the allowlisted admin email (default: `product@matalabs.io`)
 
-Verify the API:
+Verify API:
 
 ```bash
 curl -fsS https://adequate-surprise-production-96bc.up.railway.app/health
 ```
 
-Replace the hostname with your Railway public URL if it differs (Railway → service → Networking).
-
 ---
 
-## Step 1 — Railway prep
+## Step 1 — Prepare Railway (backend)
 
-Railway → **bandforge-api** (or your API service) → **Variables**.
+Railway → your API service → **Variables**.
 
-### Required for admin
+### 1a. Required admin allowlist
 
 ```env
 ADMIN_ALLOWED_EMAIL=product@matalabs.io
 ```
 
-Must match the value you set on Vercel (fail-closed if unset or mismatched).
+Must be identical on Vercel later.
 
-### After you know the admin Vercel URL
+### 1b. After you have the admin Vercel URL
 
-Keep student `FRONTEND_URL` pointing at the **student** app. Add the admin origin to **`CORS_ORIGINS`** so both frontends are allowed when anything hits Railway from the browser (tools, edge cases):
+Keep student app as `FRONTEND_URL`. Add the **admin** origin to `CORS_ORIGINS`:
 
 ```env
-# Student app stays as FRONTEND_URL
-FRONTEND_URL=https://bandforge-web.vercel.app
-
-# Comma-separated extras — include admin production (and previews if needed)
+FRONTEND_URL=https://frontend-chi-ebon-lxy95up4j4.vercel.app
 CORS_ORIGINS=https://<your-admin-project>.vercel.app
 ```
 
-With a custom domain later:
+If you need both student + admin origins in CORS (comma-separated):
 
 ```env
-CORS_ORIGINS=https://admin.matalabs.io,https://<your-admin-project>.vercel.app
+CORS_ORIGINS=https://frontend-chi-ebon-lxy95up4j4.vercel.app,https://<your-admin-project>.vercel.app
 ```
 
-Redeploy Railway after changing variables if your setup does not hot-reload env.
+Redeploy Railway if env does not hot-reload.
 
-### Confirm admin API is mounted
-
-Health alone is enough to prove the process is up. Admin routes require auth; a `401`/`403` from `/admin/...` (not `404`) means the router is mounted.
+You can finish Step 1b after Step 4 once Vercel gives you the admin URL.
 
 ---
 
 ## Step 2 — Create the Vercel project
 
-1. [Vercel Dashboard](https://vercel.com) → **Add New…** → **Project** → import the **MATA-lab** (or BandForge) monorepo.
-2. **Root Directory:** `admin/web`  
-   - Do **not** use `admin/` — the root `admin/package.json` only forwards scripts; the Next app lives in `web/`.
-3. Framework Preset: **Next.js** (auto-detected).
-4. Build settings (defaults are fine):
+1. Open [Vercel](https://vercel.com) → **Add New…** → **Project**.
+2. Import **`matalabsio/admin`** (not the monorepo, not `frontend`).
+3. Configure:
 
    | Setting | Value |
    |---------|--------|
+   | **Root Directory** | `web` |
+   | Framework | Next.js (auto) |
    | Install Command | `npm install` |
    | Build Command | `npm run build` |
-   | Output | Next.js default |
 
-5. Do **not** add a `vercel.json` unless you later need custom timeouts; body size for listening uploads is already raised in `admin/web/next.config.ts` (`proxyClientMaxBodySize: "50mb"`).
-
-Create the project but set env vars **before** the first successful production deploy (next step).
+4. **Do not** set Root Directory to repo root (`admin/`). The Next app lives in `web/`.
+5. Pause before first deploy — add env vars in Step 3 first (or deploy, then set env and redeploy).
 
 ---
 
-## Step 3 — Environment variables (Production + Preview)
+## Step 3 — Vercel environment variables
 
 Vercel → project → **Settings** → **Environment Variables**.
 
-Apply to **Production** and **Preview** (recommended so preview deploys can reach the API):
+Apply to **Production** and **Preview**:
 
-| Variable | Example value | Notes |
-|----------|---------------|--------|
-| `API_URL` | `https://adequate-surprise-production-96bc.up.railway.app` | **Preferred.** Runtime on Vercel; can fix without rebuilding. No trailing slash. |
-| `NEXT_PUBLIC_API_URL` | same Railway URL | Build-time fallback; keep in sync with `API_URL`. |
-| `NEXT_PUBLIC_AUTH_ENABLED` | `true` | Required for middleware / session gates. |
-| `ADMIN_ALLOWED_EMAIL` | `product@matalabs.io` | Must match Railway. |
+| Variable | Value | Required |
+|----------|--------|----------|
+| `API_URL` | `https://adequate-surprise-production-96bc.up.railway.app` | Yes (runtime; preferred) |
+| `NEXT_PUBLIC_API_URL` | same Railway URL | Yes (build-time fallback) |
+| `NEXT_PUBLIC_AUTH_ENABLED` | `true` | Yes |
+| `ADMIN_ALLOWED_EMAIL` | `product@matalabs.io` | Yes — must match Railway |
 
-Rules:
-
-- Never set `API_URL` / `NEXT_PUBLIC_API_URL` to `localhost` or `127.0.0.1` on Vercel.
-- Prefer changing `API_URL` if the Railway hostname moves — `admin/web/lib/api.ts` reads it at runtime when `VERCEL=1`.
-- After changing **`NEXT_PUBLIC_*`** vars, **Redeploy** so the new values are baked in.
-- Changing only **`API_URL`** often works on the next request without a rebuild, but redeploy if proxies still look wrong.
-
-Copy-paste block:
+### Copy-paste block
 
 ```env
 API_URL=https://adequate-surprise-production-96bc.up.railway.app
@@ -137,24 +113,31 @@ NEXT_PUBLIC_AUTH_ENABLED=true
 ADMIN_ALLOWED_EMAIL=product@matalabs.io
 ```
 
+### Rules
+
+- No trailing slash on API URLs.
+- Never use `localhost` / `127.0.0.1` on Vercel.
+- After changing any `NEXT_PUBLIC_*` value → **Redeploy**.
+- Changing only `API_URL` often works without a full rebuild; redeploy if proxies still fail.
+- Admin does **not** need `NEXT_PUBLIC_OAUTH_SITE_URL` (Google is for the student app).
+
 ---
 
 ## Step 4 — Deploy
 
-1. Trigger **Deploy** (or push to the connected branch).
-2. Open `https://<your-admin-project>.vercel.app/admin/login`.
-3. Copy the production URL into Railway `CORS_ORIGINS` if you have not already (Step 1).
+1. Click **Deploy** (or push to `main` on `matalabsio/admin`).
+2. Note the production URL, e.g. `https://admin-xxxx.vercel.app`.
+3. Open: `https://<admin>.vercel.app/admin/login`
+4. Go back to Railway and set `CORS_ORIGINS` to include that admin URL (Step 1b).
 
 ### Optional custom domain
 
-1. Vercel → **Domains** → add e.g. `admin.matalabs.io` and follow DNS instructions.
+1. Vercel → **Domains** → add e.g. `admin.matalabs.io`.
 2. Update Railway:
 
    ```env
    CORS_ORIGINS=https://admin.matalabs.io
    ```
-
-3. Login and cookies stay on the custom host; no shared cookie domain with the student app.
 
 ---
 
@@ -162,11 +145,11 @@ ADMIN_ALLOWED_EMAIL=product@matalabs.io
 
 The UI only admits users who:
 
-1. Exist in Supabase (via backend auth),
+1. Exist via backend auth (Supabase),
 2. Have role `admin` or `super_admin`,
 3. Match `ADMIN_ALLOWED_EMAIL` on **both** Railway and Vercel.
 
-From a machine with backend env / Supabase credentials:
+From a machine with backend credentials:
 
 ```bash
 cd backend
@@ -174,26 +157,23 @@ source .venv/bin/activate
 python scripts/bootstrap_admin_user.py
 # or promote an existing user:
 python scripts/promote_admin.py
-# same scripts also live under admin/scripts/
 ```
 
-Use the email you set in `ADMIN_ALLOWED_EMAIL`. Admin login is **email/password** at `/admin/login` (not Google as the primary path).
+Use the same email as `ADMIN_ALLOWED_EMAIL`. Sign in at `/admin/login` with email + password.
 
 ---
 
-## Step 6 — Post-deploy verification checklist
+## Step 6 — Smoke test
 
 | # | Test | Pass when |
 |---|------|-----------|
-| 1 | `curl -fsS <RAILWAY>/health` | `{"status":"ok"}` (or equivalent ok payload) |
-| 2 | Open `/admin/login` | Login form loads (no blank 500) |
-| 3 | Sign in with a **non-allowlisted** account | Denied / no admin session |
-| 4 | Sign in with allowlisted admin | Redirect to `/admin`; dashboard KPIs load |
-| 5 | DevTools → Application → Cookies | `bf_access` / `bf_refresh` on the **admin** host; `Secure` in production |
-| 6 | `/admin/users`, `/admin/mocks`, `/admin/question-bank` | Lists load (or empty states, not proxy 503) |
-| 7 | Listening audio upload (if used) | Upload ≤ ~50MB via `/api/admin/...` succeeds |
-| 8 | Logout | Cookies cleared; revisit `/admin` → redirected to login |
-| 9 | Preview deployment | Preview env has `API_URL`; login still works |
+| 1 | `curl <RAILWAY>/health` | OK |
+| 2 | Open `/admin/login` | Form loads |
+| 3 | Non-allowlisted login | Denied |
+| 4 | Allowlisted admin login | Lands on `/admin`; KPIs load |
+| 5 | Cookies on admin host | `bf_access` / `bf_refresh` present, `Secure` |
+| 6 | `/admin/users`, `/admin/mocks`, `/admin/question-bank` | Load (or empty, not 503) |
+| 7 | Logout | Session cleared; `/admin` → login |
 
 ---
 
@@ -201,52 +181,50 @@ Use the email you set in `ADMIN_ALLOWED_EMAIL`. Admin login is **email/password*
 
 | | Local | Production |
 |--|--------|------------|
-| UI | `admin/web` on `http://127.0.0.1:3001` | Vercel HTTPS |
-| API | `uvicorn` on `:8000` | Railway public URL |
-| Env file | `admin/web/.env.example` → `admin/web/.env.local` | Vercel project env |
-| Docs | [LOCAL_SETUP.md](./LOCAL_SETUP.md) | this file |
+| UI | `admin/web` → `http://127.0.0.1:3001` | Vercel HTTPS |
+| API | `uvicorn` `:8000` | Railway |
+| Env | `web/.env.local` from `web/.env.example` | Vercel project env |
+
+Local setup: [LOCAL_SETUP.md](./LOCAL_SETUP.md)
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---------|--------|-----|
-| `503` / “API_URL missing” / cannot reach API | Env unset or points at localhost | Set `API_URL` (and `NEXT_PUBLIC_API_URL`) to the Railway URL on Production **and** Preview; redeploy if needed |
-| Login loop / always back to `/admin/login` | Auth disabled or cookies not set | `NEXT_PUBLIC_AUTH_ENABLED=true`; use HTTPS (Secure cookies); check BFF `/api/auth/login` response |
-| `403` after successful password login | Email ≠ allowlist or missing admin role | Sync `ADMIN_ALLOWED_EMAIL` on Railway + Vercel; run `promote_admin.py` / bootstrap |
-| Build succeeds but all admin fetches fail | Railway down or wrong host | `curl /health`; confirm hostname matches Networking; legacy Railway hosts are remapped in `admin/web/lib/api.ts` |
-| CORS error in browser | Something calling Railway directly, or origin missing | Prefer `/api/*` on Vercel only; add admin origin to Railway `CORS_ORIGINS` |
-| Large MP3 upload truncated / fails | Body size limits | App allows 50MB via Next proxy; Vercel plan/function limits may still apply — use smaller files or upgrade plan if needed |
-| `502` from Railway | Port mismatch | Public Networking port must match the process (often **8080**); see student Railway docs |
-| `NXDOMAIN` / cannot resolve `*.railway.app` | Local DNS | Try Wi‑Fi DNS `1.1.1.1` / `8.8.8.8` |
+| Symptom | Fix |
+|---------|-----|
+| Build fails / wrong app | Root Directory must be `web` |
+| `503` / cannot reach API | Set `API_URL` + `NEXT_PUBLIC_API_URL` to Railway URL; redeploy |
+| Login loop | `NEXT_PUBLIC_AUTH_ENABLED=true` + redeploy; check `/api/auth/login` |
+| `403` after login | Sync `ADMIN_ALLOWED_EMAIL`; run `promote_admin.py` |
+| CORS in browser | Add admin origin to Railway `CORS_ORIGINS`; prefer `/api/*` on Vercel |
+| Large upload fails | Next allows ~50MB; Vercel plan limits may still apply |
 
 ---
 
-## Quick copy-paste checklist
+## Quick checklist
 
 ```text
 Railway:
   [ ] curl /health OK
-  [ ] ADMIN_ALLOWED_EMAIL=<same as Vercel>
-  [ ] FRONTEND_URL= student app (unchanged)
-  [ ] CORS_ORIGINS includes https://<admin>.vercel.app (and custom domain if any)
-  [ ] JWT secrets not dev placeholders
+  [ ] ADMIN_ALLOWED_EMAIL=product@matalabs.io
+  [ ] FRONTEND_URL= student Vercel URL
+  [ ] CORS_ORIGINS includes admin Vercel URL
 
-Vercel (Root Directory = admin/web):
-  [ ] API_URL=https://<railway>.up.railway.app
+Vercel (import matalabsio/admin, Root Directory = web):
+  [ ] API_URL=https://adequate-surprise-production-96bc.up.railway.app
   [ ] NEXT_PUBLIC_API_URL= same
   [ ] NEXT_PUBLIC_AUTH_ENABLED=true
-  [ ] ADMIN_ALLOWED_EMAIL=<same as Railway>
+  [ ] ADMIN_ALLOWED_EMAIL=product@matalabs.io
   [ ] Env on Production + Preview
-  [ ] Deploy succeeded → /admin/login loads
+  [ ] Deploy → /admin/login loads
 
 Admin user:
   [ ] bootstrap_admin_user.py or promote_admin.py
   [ ] role admin/super_admin + allowlisted email
 
-Manual smoke:
-  [ ] Allowlisted login → /admin dashboard
+Smoke:
+  [ ] Allowlisted login → dashboard
   [ ] Users / mocks / question-bank load
   [ ] Logout clears session
 ```

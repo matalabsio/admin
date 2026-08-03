@@ -139,6 +139,7 @@ export function AdminReviewAnalyticsClient() {
           <table className="w-full min-w-[420px] text-left text-sm">
             <thead>
               <tr className="border-b border-[#F1F5F9] text-[11px] uppercase tracking-wide text-[#94A3B8]">
+                <th className="w-12 px-3 py-2.5 text-right font-semibold sm:px-4">#</th>
                 <th className="px-4 py-2.5 font-semibold sm:px-5">Criterion</th>
                 <th className="px-4 py-2.5 font-semibold">MAE</th>
                 <th className="px-4 py-2.5 font-semibold">Samples</th>
@@ -150,6 +151,9 @@ export function AdminReviewAnalyticsClient() {
                   key={`${row.key}-${index}`}
                   className="border-b border-[#F8FAFC]"
                 >
+                  <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-[#94A3B8] sm:px-4">
+                    {index + 1}
+                  </td>
                   <td className="px-4 py-2.5 font-medium text-[#334155] sm:px-5">
                     {row.label}
                   </td>
@@ -163,7 +167,7 @@ export function AdminReviewAnalyticsClient() {
               ))}
               {!loading && (data?.criterion_mae?.length ?? 0) === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-6 text-center text-[#94A3B8] sm:px-5">
+                  <td colSpan={4} className="px-4 py-6 text-center text-[#94A3B8] sm:px-5">
                     No completed reviews with AI in this window.
                   </td>
                 </tr>

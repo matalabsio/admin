@@ -7,7 +7,8 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# app.* lives in backend/ (this file is under admin/scripts/)
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
 
 from app.db.supabase_client import get_supabase
 

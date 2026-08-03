@@ -8,6 +8,9 @@ import {
   adminFilterPillActive,
   adminLink,
   adminMutedLabel,
+  adminSrNo,
+  adminSrTd,
+  adminSrTh,
   adminTable,
   adminTableHead,
 } from "@/components/admin/admin-ui";
@@ -129,6 +132,7 @@ export function AdminQuestionsTreeClient({ mockId }: Props) {
         <table className="w-full min-w-[760px] text-left text-sm text-navy">
           <thead className={adminTableHead}>
             <tr>
+              <th className={adminSrTh}>#</th>
               <th className="px-4 py-3">Module</th>
               <th className="px-4 py-3">Part</th>
               <th className="px-4 py-3">Question</th>
@@ -137,8 +141,9 @@ export function AdminQuestionsTreeClient({ mockId }: Props) {
             </tr>
           </thead>
           <tbody>
-            {shown.map((q) => (
+            {shown.map((q, index) => (
               <tr key={q.id} className="border-t border-[#EDF1F6]">
+                <td className={adminSrTd}>{adminSrNo(1, index)}</td>
                 <td className="px-4 py-3 capitalize">{q.module}</td>
                 <td className="px-4 py-3 tabular-nums">{q.part}</td>
                 <td className="px-4 py-3 tabular-nums">

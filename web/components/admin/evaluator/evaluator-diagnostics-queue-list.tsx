@@ -8,6 +8,9 @@ import {
   adminFilterPillActive,
   adminLink,
   adminMeta,
+  adminSrNo,
+  adminSrTd,
+  adminSrTh,
   adminStatusBadgeStyles,
   adminTable,
   adminTableHead,
@@ -73,6 +76,7 @@ type Props = {
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  pageSize?: number;
 };
 
 export function EvaluatorDiagnosticsQueueList({
@@ -82,6 +86,7 @@ export function EvaluatorDiagnosticsQueueList({
   page,
   totalPages,
   onPageChange,
+  pageSize = 25,
 }: Props) {
   return (
     <div className="space-y-4">
@@ -144,6 +149,7 @@ export function EvaluatorDiagnosticsQueueList({
             <table className="w-full min-w-[880px] text-left text-sm text-ink">
               <thead className={adminTableHead}>
                 <tr>
+                  <th className={adminSrTh}>#</th>
                   <th className="px-4 py-3">Student</th>
                   <th className="px-4 py-3">Contact</th>
                   <th className="px-4 py-3">Bands</th>
@@ -154,8 +160,9 @@ export function EvaluatorDiagnosticsQueueList({
                 </tr>
               </thead>
               <tbody>
-                {items.map((row) => (
+                {items.map((row, index) => (
                   <tr key={row.id} className="border-t border-border">
+                    <td className={adminSrTd}>{adminSrNo(page, index, pageSize)}</td>
                     <td className="px-4 py-3 font-medium">
                       <div className="flex items-center gap-2">
                         <span className={cn(adminAvatar, "size-8 text-xs")}>

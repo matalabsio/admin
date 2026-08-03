@@ -30,6 +30,9 @@ import {
   adminSubtext,
   adminTable,
   adminTableHead,
+  adminSrNo,
+  adminSrTd,
+  adminSrTh,
 } from "@/components/admin/admin-ui";
 import {
   adminApi,
@@ -424,6 +427,7 @@ export function AdminQuestionBankOverviewClient() {
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className={adminTableHead}>
               <tr>
+                <th className={adminSrTh}>#</th>
                 <th className="px-4 py-3 sm:px-6">Skill</th>
                 <th className="px-3 py-3 text-right">Mock Qs</th>
                 <th className="px-3 py-3 text-right">Practice Qs</th>
@@ -436,13 +440,14 @@ export function AdminQuestionBankOverviewClient() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F1F4F8]">
-              {skillRows.map((row) => {
+              {skillRows.map((row, index) => {
                 const partsPct =
                   row.partsTotal > 0
                     ? Math.round((row.partsFilled / row.partsTotal) * 100)
                     : 0;
                 return (
                   <tr key={row.skill} className="hover:bg-[#FBFCFE]">
+                    <td className={adminSrTd}>{adminSrNo(1, index)}</td>
                     <td className="px-4 py-3.5 sm:px-6">
                       <span className="flex items-center gap-2 font-semibold capitalize text-navy">
                         <span

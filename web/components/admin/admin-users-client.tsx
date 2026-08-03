@@ -15,6 +15,9 @@ import {
   adminMeta,
   adminMutedLabel,
   adminStatusBadgeStyles,
+  adminSrNo,
+  adminSrTd,
+  adminSrTh,
   adminTable,
   adminTableHead,
 } from "@/components/admin/admin-ui";
@@ -281,6 +284,7 @@ export function AdminUsersClient({ initialView }: Props) {
           <table className="w-full min-w-[900px] text-left text-sm text-black">
             <thead className={adminTableHead}>
               <tr>
+                <th className={adminSrTh}>#</th>
                 <th className="px-4 py-3">Student</th>
                 <th className="px-4 py-3">Joined</th>
                 <th className="px-4 py-3">Attempts</th>
@@ -291,8 +295,9 @@ export function AdminUsersClient({ initialView }: Props) {
               </tr>
             </thead>
             <tbody>
-              {shown.map((user) => (
+              {shown.map((user, index) => (
                 <tr key={user.id} className="border-b border-border last:border-0">
+                  <td className={adminSrTd}>{adminSrNo(page, index, PAGE_SIZE)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <span className={adminAvatar}>

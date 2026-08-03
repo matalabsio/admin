@@ -31,6 +31,23 @@ export const adminTable =
 export const adminTableHead =
   "border-b border-[#EDF1F6] bg-[#FBFCFE] font-mono text-[10px] font-medium uppercase tracking-[0.1em] text-[#94A3B8]";
 
+/** Header cell for serial number column */
+export const adminSrTh =
+  "w-12 px-3 py-3 text-right tabular-nums sm:px-4";
+
+/** Body cell for serial number column */
+export const adminSrTd =
+  "px-3 py-3 text-right font-mono text-xs tabular-nums text-[#94A3B8] sm:px-4";
+
+/** 1-based serial across paginated tables (page 2 / size 25 → 26…) */
+export function adminSrNo(
+  page: number,
+  index: number,
+  pageSize = 25,
+): number {
+  return (Math.max(1, page) - 1) * pageSize + index + 1;
+}
+
 export const adminAvatar =
   "inline-flex size-10 items-center justify-center rounded-full bg-cyan font-mono text-sm font-semibold text-navy";
 

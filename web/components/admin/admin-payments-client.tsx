@@ -8,6 +8,9 @@ import {
   adminFilterPillActive,
   adminMeta,
   adminMutedLabel,
+  adminSrNo,
+  adminSrTd,
+  adminSrTh,
   adminStatusBadgeStyles,
   adminTable,
   adminTableHead,
@@ -190,6 +193,7 @@ export function AdminPaymentsClient({ initialTab = "payments" }: { initialTab?: 
             <table className="w-full min-w-[840px] text-left text-sm text-black">
               <thead className={adminTableHead}>
                 <tr>
+                  <th className={adminSrTh}>#</th>
                   <th className="px-4 py-3">Student</th>
                   <th className="px-4 py-3">Plan</th>
                   <th className="px-4 py-3">Amount</th>
@@ -199,8 +203,9 @@ export function AdminPaymentsClient({ initialTab = "payments" }: { initialTab?: 
                 </tr>
               </thead>
               <tbody>
-                {payments.map((p) => (
+                {payments.map((p, index) => (
                   <tr key={p.id} className="border-b border-border last:border-0">
+                    <td className={adminSrTd}>{adminSrNo(page, index, PAGE_SIZE)}</td>
                     <td className="px-4 py-3">
                       <p className="font-semibold text-navy">{p.student_name ?? "—"}</p>
                       <p className="text-xs text-[#5A6B82]">{p.student_email ?? "—"}</p>
@@ -231,6 +236,7 @@ export function AdminPaymentsClient({ initialTab = "payments" }: { initialTab?: 
           <table className="w-full min-w-[760px] text-left text-sm text-black">
             <thead className={adminTableHead}>
               <tr>
+                <th className={adminSrTh}>#</th>
                 <th className="px-4 py-3">Student</th>
                 <th className="px-4 py-3">Plan</th>
                 <th className="px-4 py-3">Status</th>
@@ -239,8 +245,9 @@ export function AdminPaymentsClient({ initialTab = "payments" }: { initialTab?: 
               </tr>
             </thead>
             <tbody>
-              {subscriptions.map((s) => (
+              {subscriptions.map((s, index) => (
                 <tr key={s.id} className="border-b border-border last:border-0">
+                  <td className={adminSrTd}>{adminSrNo(page, index, PAGE_SIZE)}</td>
                   <td className="px-4 py-3">
                     <p className="font-semibold text-navy">{s.student_name ?? "—"}</p>
                     <p className="text-xs text-[#5A6B82]">{s.student_email ?? "—"}</p>
