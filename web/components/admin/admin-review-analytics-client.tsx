@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BarChart3, RefreshCw } from "lucide-react";
+import { BarChart3, Download, RefreshCw } from "lucide-react";
 import { AdminKpiCard } from "@/components/admin/admin-kpi-card";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import {
@@ -31,6 +31,7 @@ export function AdminReviewAnalyticsClient() {
   const [module, setModule] = useState<"all" | "speaking" | "writing">("all");
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -50,21 +51,44 @@ export function AdminReviewAnalyticsClient() {
     void load();
   }, [load]);
 
+  const downloadCsv = async () => {
+    setDownloading(true);
+    setError(null);
+    try {
+      await adminApi.downloadReviewAnalyticsCsv({ module, days });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "CSV download failed");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <AdminPageHeader
         title="Review analytics"
         subtitle="AI vs human agreement, override rate, and criterion MAE for completed reviews."
         actions={
-          <button
-            type="button"
-            className={adminBtnSecondary}
-            onClick={() => void load()}
-            disabled={loading}
-          >
-            <RefreshCw className={cn("size-3.5", loading && "animate-spin")} aria-hidden />
-            Refresh
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={adminBtnSecondary}
+              onClick={() => void downloadCsv()}
+              disabled={downloading || loading}
+            >
+              <Download className="size-3.5" aria-hidden />
+              {downloading ? "Downloading…" : "Download CSV"}
+            </button>
+            <button
+              type="button"
+              className={adminBtnSecondary}
+              onClick={() => void load()}
+              disabled={loading}
+            >
+              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} aria-hidden />
+              Refresh
+            </button>
+          </div>
         }
       />
 

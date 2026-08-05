@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Download, Search } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import {
   adminBtnSecondary,
@@ -98,9 +98,22 @@ export function AdminUsersClient({ initialView }: Props) {
   const [sort, setSort] = useState<"latest" | "active" | "band" | "attempts">(
     normalizeView(initialView) === "attempts" ? "attempts" : "latest",
   );
+  const [downloading, setDownloading] = useState(false);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const copy = VIEW_COPY[view];
+
+  const downloadCsv = async () => {
+    setDownloading(true);
+    setError(null);
+    try {
+      await adminApi.downloadUsersOverviewCsv();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "CSV download failed");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const selectView = (next: UsersView) => {
     setView(next);
@@ -186,7 +199,22 @@ export function AdminUsersClient({ initialView }: Props) {
 
   return (
     <div className="space-y-4">
-      <AdminPageHeader eyebrow="Users" title={copy.title} subtitle={copy.subtitle} />
+      <AdminPageHeader
+        eyebrow="Users"
+        title={copy.title}
+        subtitle={copy.subtitle}
+        actions={
+          <button
+            type="button"
+            className={adminBtnSecondary}
+            onClick={() => void downloadCsv()}
+            disabled={downloading}
+          >
+            <Download className="size-3.5" aria-hidden />
+            {downloading ? "Downloading…" : "Download CSV"}
+          </button>
+        }
+      />
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {(
           [

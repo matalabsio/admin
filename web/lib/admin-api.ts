@@ -17,6 +17,35 @@ async function adminCall<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+async function adminDownload(path: string, fallbackFilename: string): Promise<void> {
+  const res = await fetch(`/api/admin${path}`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    let message = `Download failed (${res.status})`;
+    try {
+      const body = await parseJsonResponse<ApiErrorBody>(res);
+      message = parseApiError(body, res.status);
+    } catch {
+      /* keep status message */
+    }
+    throw new ApiError(message, res.status);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  const filename = match?.[1]?.trim() || fallbackFilename;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 async function adminMultipartCall<T>(path: string, formData: FormData): Promise<T> {
   const res = await fetch(`/api/admin${path}`, {
     method: "POST",
@@ -591,6 +620,45 @@ export type AiHealthResponse = {
   speaking_failed: number;
 };
 
+export type ReliabilityLatencyStat = {
+  n: number;
+  p50_ms: number | null;
+  p95_ms: number | null;
+};
+
+export type ReliabilityEvent = {
+  ts?: string;
+  kind?: string;
+  detail?: string;
+  meta?: Record<string, unknown>;
+  event?: string;
+};
+
+export type ReliabilitySnapshot = {
+  day: string;
+  counters: {
+    empty_hub_assignment: number;
+    scoring_failure: number;
+    planner_failure: number;
+    task_done: number;
+    hub_complete: number;
+    tasks_assigned_today: number;
+    [key: string]: number;
+  };
+  completion_rate: number | null;
+  latency: Record<string, ReliabilityLatencyStat>;
+  recent_events: ReliabilityEvent[];
+  practice?: {
+    hubs_by_skill: Record<string, number>;
+    hub_completions_7d: number;
+  };
+  notifications?: {
+    queued: number;
+    failed_24h: number;
+    by_channel: Record<string, number>;
+  };
+};
+
 export type ReadingBuilderQuestionIn = {
   question_type: string;
   prompt: string;
@@ -598,6 +666,7 @@ export type ReadingBuilderQuestionIn = {
   correct_answer: string;
   alt_answers: string[];
   skill_tag?: string | null;
+  difficulty?: "easy" | "medium" | "hard";
 };
 
 export type ReadingBuilderQuestionOut = {
@@ -610,6 +679,7 @@ export type ReadingBuilderQuestionOut = {
   correct_answer: string;
   alt_answers: string[];
   skill_tag?: string | null;
+  difficulty?: "easy" | "medium" | "hard";
 };
 
 export type ReadingPassageResponse = {
@@ -628,6 +698,7 @@ export type ListeningBuilderQuestionIn = {
   skill_tag?: string | null;
   instructions?: string | null;
   choose_two?: boolean;
+  difficulty?: "easy" | "medium" | "hard";
 };
 
 export type ListeningBuilderQuestionOut = {
@@ -641,6 +712,7 @@ export type ListeningBuilderQuestionOut = {
   alt_answers: string[];
   skill_tag?: string | null;
   choose_two?: boolean;
+  difficulty?: "easy" | "medium" | "hard";
 };
 
 export type ListeningPartResponse = {
@@ -776,6 +848,10 @@ export const adminApi = {
 
   aiHealth() {
     return adminCall<AiHealthResponse>("/ai/health");
+  },
+
+  reliability() {
+    return adminCall<ReliabilitySnapshot>("/reliability");
   },
 
   dashboardOverview() {
@@ -1359,6 +1435,35 @@ export const adminApi = {
     return adminCall<ReviewAnalyticsResponse>(`/review-analytics${suffix}`);
   },
 
+  downloadReviewAnalyticsCsv(params?: {
+    module?: "speaking" | "writing" | "all";
+    days?: number;
+  }) {
+    const q = new URLSearchParams();
+    if (params?.module) q.set("module", params.module);
+    if (params?.days) q.set("days", String(params.days));
+    const suffix = q.toString() ? `?${q}` : "";
+    return adminDownload(
+      `/exports/review-analytics.csv${suffix}`,
+      "review-analytics.csv",
+    );
+  },
+
+  downloadUsersOverviewCsv() {
+    return adminDownload("/exports/users-overview.csv", "users-overview.csv");
+  },
+
+  downloadReliabilitySnapshotCsv() {
+    return adminDownload(
+      "/exports/reliability-snapshot.csv",
+      "reliability-snapshot.csv",
+    );
+  },
+
+  downloadHubProgress7dCsv() {
+    return adminDownload("/exports/hub-progress-7d.csv", "hub-progress-7d.csv");
+  },
+
   listQuestionBank(skill: string) {
     return adminCall<QuestionBankListResponse>(
       `/question-bank?skill=${encodeURIComponent(skill)}`,
@@ -1375,6 +1480,21 @@ export const adminApi = {
     return adminCall<QuestionBankCreateSetResponse>(`/question-bank/sets`, {
       method: "POST",
       body: JSON.stringify(body),
+    });
+  },
+
+  patchQuestionBankSetStatus(
+    setId: string,
+    status: "draft" | "published" | "archived",
+  ) {
+    return adminCall<{
+      set_id: string;
+      skill: string;
+      status: string;
+      ok: boolean;
+    }>(`/question-bank/sets/${setId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
     });
   },
 

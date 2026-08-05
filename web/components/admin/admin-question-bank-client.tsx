@@ -92,6 +92,7 @@ export function AdminQuestionBankClient({
     {},
   );
   const [deletingSetId, setDeletingSetId] = useState<string | null>(null);
+  const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<QuestionBankSetItem | null>(
     null,
   );
@@ -253,6 +254,29 @@ export function AdminQuestionBankClient({
       setError(e instanceof Error ? e.message : "Could not delete practice set");
     } finally {
       setDeletingSetId(null);
+    }
+  };
+
+  const patchSetStatus = async (
+    item: QuestionBankSetItem,
+    next: "draft" | "published" | "archived",
+  ) => {
+    if (statusBusyId) return;
+    setStatusBusyId(item.set_id);
+    setError(null);
+    try {
+      const res = await adminApi.patchQuestionBankSetStatus(item.set_id, next);
+      setSets((prev) =>
+        prev.map((s) =>
+          s.set_id === item.set_id ? { ...s, status: res.status } : s,
+        ),
+      );
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Could not update practice set status",
+      );
+    } finally {
+      setStatusBusyId(null);
     }
   };
 
@@ -543,11 +567,13 @@ export function AdminQuestionBankClient({
                               </span>
                               Set {item.set_number}
                               {item.status ? ` · ${item.status}` : ""}
+                              {item.difficulty ? ` · ${item.difficulty}` : ""}
                             </>
                           ) : (
                             <>
                               Bank {item.bank_number} · Set {item.set_number} ·{" "}
                               {item.difficulty}
+                              {item.status ? ` · ${item.status}` : ""}
                             </>
                           )}
                         </span>
@@ -564,6 +590,39 @@ export function AdminQuestionBankClient({
                       </span>
                     </button>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
+                      {item.status !== "published" ? (
+                        <button
+                          type="button"
+                          onClick={() => void patchSetStatus(item, "published")}
+                          disabled={statusBusyId === item.set_id}
+                          className={cn(adminBtnPrimary, "px-3 py-2 text-sm")}
+                        >
+                          {statusBusyId === item.set_id
+                            ? "Publishing…"
+                            : "Publish"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void patchSetStatus(item, "draft")}
+                          disabled={statusBusyId === item.set_id}
+                          className={cn(adminBtnSecondary, "px-3 py-2 text-sm")}
+                        >
+                          {statusBusyId === item.set_id
+                            ? "Updating…"
+                            : "Unpublish"}
+                        </button>
+                      )}
+                      {item.status !== "archived" ? (
+                        <button
+                          type="button"
+                          onClick={() => void patchSetStatus(item, "archived")}
+                          disabled={statusBusyId === item.set_id}
+                          className={cn(adminBtnSecondary, "px-3 py-2 text-sm")}
+                        >
+                          Archive
+                        </button>
+                      ) : null}
                       {isCustom ? (
                         <button
                           type="button"

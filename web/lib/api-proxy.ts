@@ -249,13 +249,20 @@ export async function proxyToBackend(
   const responseContentType = res.headers.get("content-type") ?? "application/json";
   const isBinary =
     responseContentType.startsWith("audio/") ||
-    responseContentType.startsWith("application/octet-stream");
+    responseContentType.startsWith("application/octet-stream") ||
+    responseContentType.startsWith("text/csv");
 
   if (isBinary) {
     const passthroughHeaders: Record<string, string> = {
       "Content-Type": responseContentType,
     };
-    for (const name of ["Content-Length", "Content-Range", "Accept-Ranges", "Cache-Control"]) {
+    for (const name of [
+      "Content-Length",
+      "Content-Range",
+      "Accept-Ranges",
+      "Cache-Control",
+      "Content-Disposition",
+    ]) {
       const value = res.headers.get(name);
       if (value) passthroughHeaders[name] = value;
     }

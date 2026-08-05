@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   BookOpen,
+  Download,
   Library,
   Layers,
   PencilLine,
@@ -95,6 +96,31 @@ export function AdminQuestionBankOverviewClient() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<"hub" | "reliability" | null>(null);
+
+  const downloadHubCsv = async () => {
+    setDownloading("hub");
+    setError(null);
+    try {
+      await adminApi.downloadHubProgress7dCsv();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Hub progress CSV download failed");
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  const downloadReliabilityCsv = async () => {
+    setDownloading("reliability");
+    setError(null);
+    try {
+      await adminApi.downloadReliabilitySnapshotCsv();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Reliability CSV download failed");
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -238,6 +264,24 @@ export function AdminQuestionBankOverviewClient() {
         subtitle="Live mock and practice-bank inventory across L / R / W / S — counts, coverage, and gaps."
         actions={
           <>
+            <button
+              type="button"
+              className={adminBtnSecondary}
+              onClick={() => void downloadHubCsv()}
+              disabled={downloading !== null}
+            >
+              <Download className="mr-1.5 size-3.5" aria-hidden />
+              {downloading === "hub" ? "Downloading…" : "Hub progress 7d CSV"}
+            </button>
+            <button
+              type="button"
+              className={adminBtnSecondary}
+              onClick={() => void downloadReliabilityCsv()}
+              disabled={downloading !== null}
+            >
+              <Download className="mr-1.5 size-3.5" aria-hidden />
+              {downloading === "reliability" ? "Downloading…" : "Reliability CSV"}
+            </button>
             <button
               type="button"
               className={adminBtnSecondary}

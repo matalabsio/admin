@@ -133,6 +133,7 @@ type Draft = {
   options: DraftOption[];
   answer: string;
   altAnswers: DraftAlt[];
+  difficulty: "easy" | "medium" | "hard";
 };
 type LocalQuestion = {
   localId: string;
@@ -142,6 +143,7 @@ type LocalQuestion = {
   options: DraftOption[] | null;
   answer: string;
   altAnswers: string[];
+  difficulty: "easy" | "medium" | "hard";
 };
 
 let _uid = 1;
@@ -188,6 +190,7 @@ function questionToPayload(q: LocalQuestion): ReadingBuilderQuestionIn {
     correct_answer: correctAnswer,
     alt_answers: q.altAnswers.filter(Boolean),
     skill_tag: null,
+    difficulty: q.difficulty || "medium",
   };
 }
 
@@ -217,6 +220,10 @@ function serverToLocal(q: ReadingBuilderQuestionOut): LocalQuestion {
     options,
     answer: isTextType(displayType) ? q.correct_answer : answer,
     altAnswers: q.alt_answers || [],
+    difficulty:
+      q.difficulty === "easy" || q.difficulty === "hard" || q.difficulty === "medium"
+        ? q.difficulty
+        : "medium",
   };
 }
 
@@ -316,6 +323,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
       options: isOpt ? makeDefaultOptions(selectedType) : [],
       answer: "",
       altAnswers: [],
+      difficulty: "medium",
     });
     setEditingId(null);
     setDraftOpen(true);
@@ -333,6 +341,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
         id: `a-${i}`,
         value: v,
       })),
+      difficulty: q.difficulty || "medium",
     });
     setSelectedType(q.type);
     setEditingId(localId);
@@ -376,6 +385,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
       altAnswers: isTextType(draft.type)
         ? draft.altAnswers.map((a) => a.value).filter(Boolean)
         : [],
+      difficulty: draft.difficulty || "medium",
     };
     if (editingId) {
       const existing = questions.find((q) => q.localId === editingId);
@@ -726,6 +736,24 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
               Cancel
             </button>
           </div>
+
+          <label className={cn(adminMutedLabel, "mb-2 block")}>
+            Difficulty
+          </label>
+          <select
+            value={draft.difficulty}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                difficulty: e.target.value as "easy" | "medium" | "hard",
+              })
+            }
+            className={cn(adminInput, "mt-0 mb-5 max-w-[200px]")}
+          >
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
 
           <label className={cn(adminMutedLabel, "mb-2 block")}>
             Question text

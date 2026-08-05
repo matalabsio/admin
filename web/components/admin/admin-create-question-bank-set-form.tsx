@@ -43,8 +43,8 @@ function normalizeSkill(raw: string): Skill {
   return "listening";
 }
 
-function showsDifficulty(skill: Skill): boolean {
-  return skill === "listening" || skill === "reading";
+function showsDifficulty(_skill: Skill): boolean {
+  return true;
 }
 
 export function AdminCreateQuestionBankSetForm({
@@ -55,9 +55,6 @@ export function AdminCreateQuestionBankSetForm({
   const [skill, setSkill] = useState<Skill>(normalizeSkill(initialSkill));
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<"draft" | "published" | "archived">(
-    "draft",
-  );
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -84,7 +81,7 @@ export function AdminCreateQuestionBankSetForm({
         skill,
         title: title.trim(),
         description: description.trim() || undefined,
-        status,
+        status: "draft",
         difficulty: difficultyVisible ? difficulty : "medium",
       });
       onCreated({ set_id: String(created.set_id), skill: created.skill });
@@ -158,7 +155,7 @@ export function AdminCreateQuestionBankSetForm({
           <fieldset>
             <legend className={adminMutedLabel}>Difficulty</legend>
             <p className={cn(adminSubtext, "mt-1 mb-2 text-[12.5px]")}>
-              Used for Listening and Reading sets in personalized plan hubs.
+              Used when ordering personalized-plan hubs (easy → medium → hard).
             </p>
             <div
               className="flex flex-wrap gap-2"
@@ -210,21 +207,11 @@ export function AdminCreateQuestionBankSetForm({
         </div>
 
         <div>
-          <label htmlFor="qb-set-status" className={adminMutedLabel}>
-            Status
-          </label>
-          <select
-            id="qb-set-status"
-            className={adminInput}
-            value={status}
-            onChange={(e) =>
-              setStatus(e.target.value as "draft" | "published" | "archived")
-            }
-          >
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
-            <option value="archived">Archived</option>
-          </select>
+          <p className={adminMutedLabel}>Status</p>
+          <p className={cn(adminSubtext, "mt-1 text-[12.5px]")}>
+            New sets start as <span className="font-semibold text-navy">draft</span>.
+            Add content, then publish from the set list.
+          </p>
         </div>
       </div>
 

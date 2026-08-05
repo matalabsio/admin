@@ -3,6 +3,7 @@ import {
   Activity,
   BarChart3,
   CreditCard,
+  Gauge,
   LayoutDashboard,
   Library,
   Mic,
@@ -74,6 +75,12 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         Icon: Activity,
         description: "Budget, latency, and provider health",
       },
+      {
+        href: "/admin/reliability",
+        label: "Reliability",
+        Icon: Gauge,
+        description: "Learning/practice counters, latency, and outbox",
+      },
     ],
   },
   {
@@ -118,6 +125,7 @@ export const ADMIN_TOP_NAV: AdminTopNavItem[] = [
     match: ["/admin/subscriptions"],
   },
   { href: "/admin/ai", label: "AI ops" },
+  { href: "/admin/reliability", label: "Reliability" },
 ];
 
 /** Mobile fixed bottom tab bar. */

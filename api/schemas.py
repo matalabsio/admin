@@ -224,7 +224,7 @@ class ModuleSectionStatus(BaseModel):
 
 class AdminMockDetail(AdminMockListItem):
     configured_listening_parts: int = 4
-    configured_reading_passages: int = 3
+    configured_reading_passages: int = 2
     configured_writing_tasks: int = 2
     section_status: list[ModuleSectionStatus] = Field(default_factory=list)
     publish_blockers: list[str] = Field(default_factory=list)
@@ -235,7 +235,7 @@ class CreateMockRequest(BaseModel):
     description: str | None = Field(default=None, max_length=500)
     catalog_number: int | None = Field(default=None, ge=1, le=20)
     listening_parts: int = Field(default=4, ge=1, le=4)
-    reading_passages: int = Field(default=3, ge=1, le=4)
+    reading_passages: int = Field(default=2, ge=1, le=4)
     writing_tasks: int = Field(default=2, ge=1, le=2)
 
 
@@ -950,6 +950,17 @@ class QuestionBankCreateSetResponse(BaseModel):
     bank_number: int
     set_number: int
     status: str
+
+
+class PatchQuestionBankSetStatusRequest(BaseModel):
+    status: Literal["draft", "published", "archived"]
+
+
+class PatchQuestionBankSetStatusResponse(BaseModel):
+    set_id: UUID
+    skill: str
+    status: str
+    ok: bool = True
 
 
 class DeleteQuestionBankSetResponse(BaseModel):
