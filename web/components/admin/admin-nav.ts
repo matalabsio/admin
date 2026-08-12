@@ -9,6 +9,7 @@ import {
   Mic,
   ScrollText,
   Users,
+  Video,
 } from "lucide-react";
 
 export type AdminNavItem = {
@@ -42,6 +43,12 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         Icon: Library,
         description: "Inventory, coverage, and set builders",
         match: ["/admin/question-bank"],
+      },
+      {
+        href: "/admin/videos",
+        label: "Videos",
+        Icon: Video,
+        description: "Stream intros by placement tag",
       },
       {
         href: "/admin/users",
@@ -112,6 +119,7 @@ export const ADMIN_TOP_NAV: AdminTopNavItem[] = [
     label: "Question bank",
     match: ["/admin/question-bank"],
   },
+  { href: "/admin/videos", label: "Videos" },
   { href: "/admin/users", label: "Users" },
   {
     href: "/admin/speaking",
@@ -131,6 +139,7 @@ export const ADMIN_TOP_NAV: AdminTopNavItem[] = [
 /** Mobile fixed bottom tab bar. */
 export const ADMIN_BOTTOM_NAV: AdminNavItem[] = [
   { href: "/admin", label: "Dashboard", Icon: LayoutDashboard, exact: true },
+  { href: "/admin/videos", label: "Videos", Icon: Video },
   { href: "/admin/users", label: "Users", Icon: Users },
   { href: "/admin/speaking", label: "Evaluator", Icon: Mic, match: ["/admin/writing", "/admin/diagnostics"] },
   {

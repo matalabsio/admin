@@ -18,10 +18,9 @@ export default async function AdminQuestionBankPage({ searchParams }: Props) {
     skill === "reading" || skill === "writing" || skill === "speaking"
       ? skill
       : "listening";
-  const tab = sp.tab === "mocks" ? "mocks" : "practice";
   return (
     <AdminShell hidePageHeader>
-      <AdminQuestionBankClient initialSkill={safeSkill} initialTab={tab} />
+      <AdminQuestionBankClient initialSkill={safeSkill} />
     </AdminShell>
   );
 }

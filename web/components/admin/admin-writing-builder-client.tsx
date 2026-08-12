@@ -31,10 +31,11 @@ type Props = {
 export function AdminWritingBuilderClient({
   source,
   part,
-  taskCount = 2,
+  taskCount,
 }: Props) {
+  const defaultTasks = source.kind === "bank" ? 1 : 2;
   const safePart = part === 2 ? 2 : 1;
-  const maxTasks = Math.min(2, Math.max(1, taskCount));
+  const maxTasks = Math.min(2, Math.max(1, taskCount ?? defaultTasks));
 
   const [prompt, setPrompt] = useState("");
   const [questionType, setQuestionType] = useState(
@@ -66,7 +67,9 @@ export function AdminWritingBuilderClient({
 
   const eyebrow = useMemo(
     () =>
-      `${source.kind === "mock" ? "Mock" : "Question bank"} · Writing · Task ${safePart}`,
+      source.kind === "bank"
+        ? "Question bank · Writing"
+        : `Mock · Writing · Task ${safePart}`,
     [safePart, source.kind],
   );
 
@@ -291,22 +294,26 @@ export function AdminWritingBuilderClient({
       />
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-2">
-          {Array.from({ length: maxTasks }, (_, i) => i + 1).map((t) => (
-            <Link
-              key={t}
-              href={builderPartHref(source, "writing", t)}
-              className={cn(
-                "rounded-full border-[1.5px] px-4 py-2 text-sm font-semibold transition-all",
-                t === safePart
-                  ? "border-cyan bg-[#E6F6F8] text-teal"
-                  : "border-[#E4E9F0] bg-white text-[#5A6B82] hover:border-cyan",
-              )}
-            >
-              Task {t}
-            </Link>
-          ))}
-        </div>
+        {maxTasks > 1 ? (
+          <div className="flex gap-2">
+            {Array.from({ length: maxTasks }, (_, i) => i + 1).map((t) => (
+              <Link
+                key={t}
+                href={builderPartHref(source, "writing", t)}
+                className={cn(
+                  "rounded-full border-[1.5px] px-4 py-2 text-sm font-semibold transition-all",
+                  t === safePart
+                    ? "border-cyan bg-[#E6F6F8] text-teal"
+                    : "border-[#E4E9F0] bg-white text-[#5A6B82] hover:border-cyan",
+                )}
+              >
+                Task {t}
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <span className="text-sm font-semibold text-navy">Writing set</span>
+        )}
         <span
           className={cn(
             "font-mono text-xs",

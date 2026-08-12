@@ -268,10 +268,14 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
         .getQuestionBankSet(source.setId)
         .then((s) => {
           setMockTitle(s.title || "");
-          setPassageCount(4);
+          const parts = Math.max(
+            1,
+            ...(s.sections ?? []).map((sec) => sec.part),
+          );
+          setPassageCount(parts);
         })
         .catch(() => {
-          /* non-blocking — builder still works */
+          setPassageCount(1);
         });
     }
   }, [source.kind, sourceId]);
@@ -992,6 +996,7 @@ function PassageTabs({
   passageCount: number;
 }) {
   const count = Math.max(1, Math.min(4, passageCount || 1));
+  if (count <= 1) return null;
   return (
     <div className="mt-5 flex flex-wrap items-center gap-2">
       <span className={adminMutedLabel}>Passages</span>

@@ -16,10 +16,10 @@ import { adminApi } from "@/lib/admin-api";
 import { cn } from "@/lib/utils";
 
 const SKILLS = [
-  { value: "listening", label: "Listening", parts: "4 parts" },
-  { value: "reading", label: "Reading", parts: "4 passages" },
-  { value: "writing", label: "Writing", parts: "2 tasks" },
-  { value: "speaking", label: "Speaking", parts: "3 parts" },
+  { value: "listening", label: "Listening", hint: "Name · video · audio · questions" },
+  { value: "reading", label: "Reading", hint: "Name · passage · questions" },
+  { value: "writing", label: "Writing", hint: "Name · prompt · image" },
+  { value: "speaking", label: "Speaking", hint: "Name · prompts · clips" },
 ] as const;
 
 const DIFFICULTIES = [
@@ -43,10 +43,6 @@ function normalizeSkill(raw: string): Skill {
   return "listening";
 }
 
-function showsDifficulty(_skill: Skill): boolean {
-  return true;
-}
-
 export function AdminCreateQuestionBankSetForm({
   initialSkill,
   onCreated,
@@ -60,14 +56,6 @@ export function AdminCreateQuestionBankSetForm({
   const [busy, setBusy] = useState(false);
 
   const skillMeta = SKILLS.find((s) => s.value === skill) ?? SKILLS[0];
-  const difficultyVisible = showsDifficulty(skill);
-
-  const selectSkill = (next: Skill) => {
-    setSkill(next);
-    if (!showsDifficulty(next)) {
-      setDifficulty("medium");
-    }
-  };
 
   const submit = async () => {
     if (!title.trim()) {
@@ -82,7 +70,7 @@ export function AdminCreateQuestionBankSetForm({
         title: title.trim(),
         description: description.trim() || undefined,
         status: "draft",
-        difficulty: difficultyVisible ? difficulty : "medium",
+        difficulty,
       });
       onCreated({ set_id: String(created.set_id), skill: created.skill });
     } catch (e) {
@@ -96,13 +84,10 @@ export function AdminCreateQuestionBankSetForm({
     <div className={cn(adminCard, "space-y-6")}>
       <div>
         <p className={adminMutedLabel}>New practice set</p>
-        <h2 className={cn(adminHeading, "mt-1 text-xl")}>
-          Create section-wise questions
-        </h2>
+        <h2 className={cn(adminHeading, "mt-1 text-xl")}>Create one set</h2>
         <p className={cn(adminSubtext, "mt-1.5")}>
-          Pick one skill, name the set, then build each part in the same full
-          builder used for mocks (question types, audio, prompts). Content is
-          served to students through personalized plan hubs.
+          Each set is a single named unit. Add content in the builder when you
+          want — Listening includes Watch video and part audio for that set.
         </p>
       </div>
 
@@ -115,7 +100,7 @@ export function AdminCreateQuestionBankSetForm({
               <button
                 key={s.value}
                 type="button"
-                onClick={() => selectSkill(s.value)}
+                onClick={() => setSkill(s.value)}
                 className={cn(
                   "cursor-pointer rounded-[12px] border px-3 py-3 text-left transition-colors",
                   active
@@ -128,7 +113,7 @@ export function AdminCreateQuestionBankSetForm({
                   {s.label}
                 </span>
                 <span className="mt-0.5 block text-[12px] text-[#94A3B8]">
-                  {s.parts} · full builder
+                  {s.hint}
                 </span>
               </button>
             );
@@ -145,54 +130,52 @@ export function AdminCreateQuestionBankSetForm({
             id="qb-set-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={`e.g. ${skillMeta.label} — form filling drills`}
+            placeholder={`e.g. ${skillMeta.label} — form filling drill`}
             className={adminInput}
             autoFocus
           />
         </div>
 
-        {difficultyVisible ? (
-          <fieldset>
-            <legend className={adminMutedLabel}>Difficulty</legend>
-            <p className={cn(adminSubtext, "mt-1 mb-2 text-[12.5px]")}>
-              Used when ordering personalized-plan hubs (easy → medium → hard).
-            </p>
-            <div
-              className="flex flex-wrap gap-2"
-              role="radiogroup"
-              aria-label="Difficulty"
-            >
-              {DIFFICULTIES.map((d) => {
-                const active = difficulty === d.value;
-                return (
-                  <label
-                    key={d.value}
-                    className={cn(
-                      adminFilterPill,
-                      "cursor-pointer gap-2",
-                      active && adminFilterPillActive,
-                    )}
-                  >
-                    <input
-                      type="radio"
-                      name="qb-set-difficulty"
-                      value={d.value}
-                      checked={active}
-                      onChange={() => setDifficulty(d.value)}
-                      className="size-3.5 accent-navy"
-                    />
-                    {d.label}
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-        ) : null}
+        <fieldset>
+          <legend className={adminMutedLabel}>Difficulty</legend>
+          <p className={cn(adminSubtext, "mt-1 mb-2 text-[12.5px]")}>
+            Used when ordering personalized-plan hubs (easy → medium → hard).
+          </p>
+          <div
+            className="flex flex-wrap gap-2"
+            role="radiogroup"
+            aria-label="Difficulty"
+          >
+            {DIFFICULTIES.map((d) => {
+              const active = difficulty === d.value;
+              return (
+                <label
+                  key={d.value}
+                  className={cn(
+                    adminFilterPill,
+                    "cursor-pointer gap-2",
+                    active && adminFilterPillActive,
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="qb-set-difficulty"
+                    value={d.value}
+                    checked={active}
+                    onChange={() => setDifficulty(d.value)}
+                    className="size-3.5 accent-navy"
+                  />
+                  {d.label}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
 
         <div>
           <label htmlFor="qb-set-description" className={adminMutedLabel}>
             Description{" "}
-            <span className="normal-case tracking-normal text-[#B0BCCB]">
+            <span className="normal-case tracking-normal text-[#94A3B8]">
               (optional)
             </span>
           </label>
@@ -200,23 +183,15 @@ export function AdminCreateQuestionBankSetForm({
             id="qb-set-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            placeholder="Who this set is for, weakness tags, notes…"
-            className={cn(adminInput, "resize-y")}
+            rows={3}
+            placeholder="Short note for admins — not shown to students."
+            className={cn(adminInput, "min-h-[88px] resize-y py-2")}
           />
-        </div>
-
-        <div>
-          <p className={adminMutedLabel}>Status</p>
-          <p className={cn(adminSubtext, "mt-1 text-[12.5px]")}>
-            New sets start as <span className="font-semibold text-navy">draft</span>.
-            Add content, then publish from the set list.
-          </p>
         </div>
       </div>
 
       {error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           {error}
         </p>
       ) : null}
@@ -228,9 +203,7 @@ export function AdminCreateQuestionBankSetForm({
           disabled={busy}
           onClick={() => void submit()}
         >
-          {busy
-            ? "Creating…"
-            : `Create ${skillMeta.label} set & open Part 1`}
+          {busy ? "Creating…" : "Create set"}
         </button>
         <button
           type="button"

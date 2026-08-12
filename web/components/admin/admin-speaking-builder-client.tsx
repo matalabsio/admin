@@ -75,11 +75,13 @@ function parseMmSs(raw: string): number | null {
   return Number.parseInt(m[1], 10) * 60 + Number.parseInt(m[2], 10);
 }
 
-const PARTS = [1, 2, 3] as const;
+const MOCK_PARTS = [1, 2, 3] as const;
 
 export function AdminSpeakingBuilderClient({ source, part }: Props) {
   const router = useRouter();
-  const safePart = part >= 1 && part <= 3 ? part : 1;
+  const isBank = source.kind === "bank";
+  const parts = isBank ? ([1] as const) : MOCK_PARTS;
+  const safePart = isBank ? 1 : part >= 1 && part <= 3 ? part : 1;
 
   const [mockLabel, setMockLabel] = useState("Speaking");
   const [questions, setQuestions] = useState<DraftQuestion[]>([
@@ -99,8 +101,11 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
 
   const questionCountLabel = useMemo(() => {
     const n = questions.length;
+    if (isBank) {
+      return `${n} question${n === 1 ? "" : "s"}`;
+    }
     return `${n} question${n === 1 ? "" : "s"} · Part ${safePart}`;
-  }, [questions.length, safePart]);
+  }, [questions.length, safePart, isBank]);
 
   const backHref = builderBackHref(source);
   const backLabel =
@@ -401,29 +406,31 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
         </p>
       </div>
 
-      {/* Part chips — match Standalone */}
-      <div className="mb-5 flex flex-wrap gap-2">
-        {PARTS.map((p) => {
-          const active = p === safePart;
-          return (
-            <button
-              key={p}
-              type="button"
-              onClick={() =>
-                router.push(builderPartHref(source, "speaking", p))
-              }
-              className={cn(
-                "rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
-                active
-                  ? "border-cyan bg-[#E6F6F8] text-teal"
-                  : "border-[#E4E9F0] bg-white text-[#5A6B82] hover:border-cyan",
-              )}
-            >
-              Part {p}
-            </button>
-          );
-        })}
-      </div>
+      {/* Part chips — mocks only (bank sets are a single unit) */}
+      {parts.length > 1 ? (
+        <div className="mb-5 flex flex-wrap gap-2">
+          {parts.map((p) => {
+            const active = p === safePart;
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() =>
+                  router.push(builderPartHref(source, "speaking", p))
+                }
+                className={cn(
+                  "rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
+                  active
+                    ? "border-cyan bg-[#E6F6F8] text-teal"
+                    : "border-[#E4E9F0] bg-white text-[#5A6B82] hover:border-cyan",
+                )}
+              >
+                Part {p}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       {error ? (
         <p className="mb-4 text-sm font-medium text-[#B4474B]">{error}</p>
@@ -436,7 +443,7 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
       <div className="rounded-[18px] border border-[#EAEEF3] bg-white px-5 py-[26px] shadow-[0_8px_22px_rgba(13,31,60,0.04)] sm:px-7">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-display text-[17px] font-bold text-navy">
-            Part {safePart} questions
+            {isBank ? "Speaking questions" : `Part ${safePart} questions`}
           </h2>
           <button
             type="button"

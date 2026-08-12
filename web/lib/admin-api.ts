@@ -837,6 +837,32 @@ export type SpeakingPartResponse = {
   questions: SpeakingBuilderQuestion[];
 };
 
+export type StreamVideoTag =
+  | "bandforge-intro"
+  | "ielts-intro"
+  | "listening-intro"
+  | "reading-intro"
+  | "writing-intro"
+  | "speaking-intro";
+
+export type StreamVideoItem = {
+  id?: string | null;
+  tag: StreamVideoTag | string;
+  title: string;
+  stream_uid: string;
+  playback_url: string;
+  duration_min: number;
+  status: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  hubs_updated?: number | null;
+};
+
+export type StreamDirectUploadResponse = {
+  uid: string;
+  uploadURL: string;
+};
+
 export const adminApi = {
   metrics() {
     return adminCall<DashboardMetrics>("/dashboard/metrics");
@@ -1557,6 +1583,53 @@ export const adminApi = {
     }>(`/question-bank/sets/${setId}/listening/${part}/audio-status${q}`);
   },
 
+  createBankWatchVideoDirectUpload(
+    setId: string,
+    body: { upload_length: number; title?: string },
+  ) {
+    const q = new URLSearchParams({
+      upload_length: String(body.upload_length),
+      title: body.title || "Set Watch explainer",
+    });
+    return adminCall<{ uid: string; uploadURL: string; set_id: string }>(
+      `/question-bank/sets/${setId}/watch-video/direct-upload?${q}`,
+      { method: "POST" },
+    );
+  },
+
+  completeBankWatchVideo(
+    setId: string,
+    body: { stream_uid: string; title?: string; duration_min?: number },
+  ) {
+    const q = new URLSearchParams({
+      stream_uid: body.stream_uid,
+      title: body.title || "Set Watch explainer",
+      duration_min: String(body.duration_min ?? 0),
+    });
+    return adminCall<{
+      ok: boolean;
+      intro_stream_uid: string;
+      preview_url: string;
+      status: string;
+      locked: boolean;
+      provider: string;
+    }>(`/question-bank/sets/${setId}/watch-video/complete?${q}`, {
+      method: "POST",
+    });
+  },
+
+  checkBankWatchVideo(setId: string) {
+    return adminCall<{
+      intro_stream_uid: string | null;
+      exists: boolean;
+      playable: boolean;
+      preview_url: string | null;
+      status: string | null;
+      locked: boolean;
+      provider: string;
+    }>(`/question-bank/sets/${setId}/watch-video-status`);
+  },
+
   loadBankReadingPart(setId: string, part: number) {
     return adminCall<BankReadingPartResponse>(
       `/question-bank/sets/${setId}/reading/${part}`,
@@ -1647,6 +1720,34 @@ export const adminApi = {
       video_preview_url?: string | null;
       video_name?: string;
     }>(`/question-bank/sets/${setId}/speaking/${part}/video`, formData);
+  },
+
+  listStreamVideos() {
+    return adminCall<{ items: StreamVideoItem[] }>("/stream/videos");
+  },
+
+  createStreamDirectUpload(body: {
+    tag: StreamVideoTag;
+    title: string;
+    max_duration_seconds?: number;
+    upload_length?: number;
+  }) {
+    return adminCall<StreamDirectUploadResponse>("/stream/direct-upload", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  completeStreamVideo(body: {
+    tag: StreamVideoTag;
+    title: string;
+    stream_uid: string;
+    duration_min?: number;
+  }) {
+    return adminCall<StreamVideoItem>("/stream/videos/complete", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
   },
 };
 

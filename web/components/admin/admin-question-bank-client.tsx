@@ -4,11 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Library, Trash2 } from "lucide-react";
-import {
-  adminApi,
-  type AdminMockListItem,
-  type QuestionBankSetItem,
-} from "@/lib/admin-api";
+import { adminApi, type QuestionBankSetItem } from "@/lib/admin-api";
 import { AdminCreateQuestionBankSetForm } from "@/components/admin/admin-create-question-bank-set-form";
 import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
@@ -16,8 +12,6 @@ import {
   adminBtnPrimary,
   adminBtnSecondary,
   adminCard,
-  adminFilterPill,
-  adminFilterPillActive,
   adminHeading,
   adminLink,
   adminMutedLabel,
@@ -33,11 +27,9 @@ const SKILLS = [
 ] as const;
 
 type Skill = (typeof SKILLS)[number]["value"];
-type Tab = "mocks" | "practice";
 
 type Props = {
   initialSkill?: string;
-  initialTab?: string;
 };
 
 function normalizeSkill(raw?: string): Skill {
@@ -46,35 +38,18 @@ function normalizeSkill(raw?: string): Skill {
   return "listening";
 }
 
-function normalizeTab(raw?: string): Tab {
-  return raw === "mocks" ? "mocks" : "practice";
-}
-
-function sumMockModuleQuestions(mocks: AdminMockListItem[], module: string): number {
-  return mocks.reduce((sum, mock) => {
-    const mod = mock.modules.find((m) => m.module === module);
-    return sum + (mod?.question_count ?? 0);
-  }, 0);
-}
-
-function liveMocksOnly(mocks: AdminMockListItem[]): AdminMockListItem[] {
-  return mocks.filter((m) => m.is_published && m.catalog_number != null);
-}
-
 function partLabel(skill: Skill, part: number): string {
-  if (skill === "writing") return `Task ${part}`;
-  if (skill === "reading") return `Passage ${part}`;
-  return `Part ${part}`;
+  if (skill === "writing") return part === 1 ? "Writing" : `Task ${part}`;
+  if (skill === "reading") return part === 1 ? "Reading" : `Passage ${part}`;
+  if (skill === "listening") return part === 1 ? "Listening" : `Part ${part}`;
+  return part === 1 ? "Speaking" : `Part ${part}`;
 }
 
 export function AdminQuestionBankClient({
   initialSkill = "listening",
-  initialTab = "practice",
 }: Props) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>(normalizeTab(initialTab));
   const [skill, setSkill] = useState<Skill>(normalizeSkill(initialSkill));
-  const [mocks, setMocks] = useState<AdminMockListItem[]>([]);
   const [sets, setSets] = useState<QuestionBankSetItem[]>([]);
   const [practiceTotals, setPracticeTotals] = useState<Record<Skill, number>>({
     listening: 0,
@@ -85,22 +60,19 @@ export function AdminQuestionBankClient({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [expandedMockIds, setExpandedMockIds] = useState<Record<string, boolean>>(
-    {},
-  );
   const [expandedSetIds, setExpandedSetIds] = useState<Record<string, boolean>>(
     {},
   );
   const [deletingSetId, setDeletingSetId] = useState<string | null>(null);
   const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<QuestionBankSetItem | null>(
     null,
   );
 
   const syncUrl = useCallback(
-    (nextTab: Tab, nextSkill: Skill) => {
+    (nextSkill: Skill) => {
       const params = new URLSearchParams();
-      params.set("tab", nextTab);
       params.set("skill", nextSkill);
       router.replace(`/admin/question-bank?${params.toString()}`, {
         scroll: false,
@@ -109,28 +81,13 @@ export function AdminQuestionBankClient({
     [router],
   );
 
-  const selectTab = (next: Tab) => {
-    setTab(next);
-    setShowCreate(false);
-    setExpandedMockIds({});
-    setExpandedSetIds({});
-    syncUrl(next, skill);
-  };
-
   const selectSkill = (next: Skill) => {
     setSkill(next);
     setShowCreate(false);
-    setExpandedMockIds({});
     setExpandedSetIds({});
-    syncUrl(tab, next);
+    syncUrl(next);
   };
 
-  const loadMocks = useCallback(async () => {
-    const list = await adminApi.listMocks();
-    setMocks(list);
-  }, []);
-
-  /** One fan-out for all skills: fills the active list + KPI totals (avoids duplicate fetch). */
   const loadPracticeAll = useCallback(async (activeSkill: Skill) => {
     const results = await Promise.all(
       SKILLS.map(async (s) => {
@@ -144,7 +101,9 @@ export function AdminQuestionBankClient({
       Object.fromEntries(
         results.map((r) => [
           r.skill,
-          r.sets.reduce((sum, set) => sum + set.total_questions, 0),
+          r.sets
+            .filter((set) => set.status !== "archived")
+            .reduce((sum, set) => sum + set.total_questions, 0),
         ]),
       ) as Record<Skill, number>,
     );
@@ -156,11 +115,7 @@ export function AdminQuestionBankClient({
       setLoading(true);
       setError(null);
       try {
-        if (tab === "mocks") {
-          await loadMocks();
-        } else {
-          await loadPracticeAll(skill);
-        }
+        await loadPracticeAll(skill);
       } catch (e) {
         if (!cancelled) {
           setError(
@@ -174,57 +129,40 @@ export function AdminQuestionBankClient({
     return () => {
       cancelled = true;
     };
-  }, [tab, skill, loadMocks, loadPracticeAll]);
+  }, [skill, loadPracticeAll]);
 
-  const liveMocks = useMemo(() => liveMocksOnly(mocks), [mocks]);
+  const setsNewestFirst = useMemo(() => {
+    const sorted = [...sets].sort((a, b) => {
+      const aTime = a.created_at ? Date.parse(a.created_at) : 0;
+      const bTime = b.created_at ? Date.parse(b.created_at) : 0;
+      if (bTime !== aTime) return bTime - aTime;
+      if (b.bank_number !== a.bank_number) return b.bank_number - a.bank_number;
+      return b.set_number - a.set_number;
+    });
+    if (showArchived) return sorted;
+    return sorted.filter((s) => s.status !== "archived");
+  }, [sets, showArchived]);
 
-  const setsNewestFirst = useMemo(
-    () =>
-      [...sets].sort((a, b) => {
-        const aTime = a.created_at ? Date.parse(a.created_at) : 0;
-        const bTime = b.created_at ? Date.parse(b.created_at) : 0;
-        if (bTime !== aTime) return bTime - aTime;
-        if (b.bank_number !== a.bank_number) return b.bank_number - a.bank_number;
-        return b.set_number - a.set_number;
-      }),
+  const archivedCount = useMemo(
+    () => sets.filter((s) => s.status === "archived").length,
     [sets],
   );
 
-  const moduleTotals = useMemo(() => {
-    if (tab === "mocks") {
-      return SKILLS.map((s) => ({
+  const moduleTotals = useMemo(
+    () =>
+      SKILLS.map((s) => ({
         skill: s.value,
         label: s.label,
-        count: sumMockModuleQuestions(liveMocks, s.value),
-      }));
-    }
-    return SKILLS.map((s) => ({
-      skill: s.value,
-      label: s.label,
-      count: practiceTotals[s.value] ?? 0,
-    }));
-  }, [tab, liveMocks, practiceTotals]);
+        count: practiceTotals[s.value] ?? 0,
+      })),
+    [practiceTotals],
+  );
 
   const skillLabel = SKILLS.find((s) => s.value === skill)?.label ?? skill;
 
-  const mocksForSkill = useMemo(
-    () =>
-      liveMocks
-        .filter((m) =>
-          m.modules.some((mod) => mod.module === skill && mod.is_enabled),
-        )
-        .sort((a, b) => (a.catalog_number ?? 0) - (b.catalog_number ?? 0)),
-    [liveMocks, skill],
-  );
-
   const openCreate = () => {
-    setTab("practice");
     setShowCreate(true);
-    syncUrl("practice", skill);
-  };
-
-  const toggleMock = (id: string) => {
-    setExpandedMockIds((prev) => ({ ...prev, [id]: !prev[id] }));
+    syncUrl(skill);
   };
 
   const toggleSet = (id: string) => {
@@ -271,6 +209,7 @@ export function AdminQuestionBankClient({
           s.set_id === item.set_id ? { ...s, status: res.status } : s,
         ),
       );
+      await loadPracticeAll(skill);
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Could not update practice set status",
@@ -301,7 +240,7 @@ export function AdminQuestionBankClient({
       />
       <AdminPageHeader
         title="Question bank"
-        subtitle="Build reusable L / R / W / S practice sets section-by-section (same builders as mocks) and serve them to students via personalized plans."
+        subtitle="Admin-uploaded practice sets for personalized plans. Full mock tests live in Mock library."
         actions={
           <>
             <Link
@@ -332,27 +271,6 @@ export function AdminQuestionBankClient({
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        {(
-          [
-            { id: "practice" as const, label: "Practice sets" },
-            { id: "mocks" as const, label: "Live mocks" },
-          ] as const
-        ).map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => selectTab(item.id)}
-            className={cn(
-              adminFilterPill,
-              tab === item.id && adminFilterPillActive,
-            )}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
       {showCreate ? (
         <AdminCreateQuestionBankSetForm
           initialSkill={skill}
@@ -360,7 +278,6 @@ export function AdminQuestionBankClient({
           onCreated={({ set_id, skill: createdSkill }) => {
             setShowCreate(false);
             setSkill(normalizeSkill(createdSkill));
-            setTab("practice");
             router.push(`/admin/question-bank/${createdSkill}/${set_id}/1`);
           }}
         />
@@ -387,7 +304,7 @@ export function AdminQuestionBankClient({
               <p className="mt-2 font-mono text-[28px] font-medium tabular-nums text-navy">
                 {item.count.toLocaleString()}
               </p>
-              <p className={cn(adminSubtext, "mt-1")}>questions</p>
+              <p className={cn(adminSubtext, "mt-1")}>practice questions</p>
             </button>
           );
         })}
@@ -403,136 +320,72 @@ export function AdminQuestionBankClient({
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className={cn(adminHeading, "text-lg")}>
-              {skillLabel} · {tab === "mocks" ? "Live mocks" : "Practice sets"}
+              {skillLabel} · Practice sets
             </h2>
             <p className={cn(adminSubtext, "mt-1")}>
-              {tab === "mocks"
-                ? "Catalog mocks — expand a test to open each part in the mock builder."
-                : "Reusable sets for personalized plans — newest first; click a set to expand parts."}
+              Reusable sets for personalized plans — newest first. Create a set,
+              upload questions, then publish.
             </p>
           </div>
-          {tab === "practice" && !showCreate ? (
-            <button
-              type="button"
-              onClick={openCreate}
-              className={cn(adminBtnPrimary, "text-sm")}
-            >
-              Create {skillLabel} set
-            </button>
-          ) : null}
-        </div>
-
-        {loading ? (
-          <p className={adminSubtext}>Loading {skillLabel.toLowerCase()}…</p>
-        ) : tab === "mocks" ? (
-          mocksForSkill.length === 0 ? (
-            <div className="py-10 text-center">
-              <Library className="mx-auto size-8 text-ink/25" strokeWidth={1.5} />
-              <p className={cn(adminHeading, "mt-3 text-base")}>
-                No live mocks with {skillLabel}
-              </p>
-            </div>
-          ) : (
-            <ul className="space-y-3">
-              {mocksForSkill.map((mock) => {
-                const mod = mock.modules.find((m) => m.module === skill);
-                const partCounts =
-                  mod?.part_counts && mod.part_counts.length > 0
-                    ? mod.part_counts
-                    : (mod?.parts ?? []).map((p) => ({
-                        part: p,
-                        question_count: 0,
-                      }));
-                const open = expandedMockIds[mock.id] ?? false;
-                return (
-                  <li
-                    key={mock.id}
-                    className="rounded-[14px] border border-[#EAEEF3] bg-[#FBFCFE]"
-                  >
-                    <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => toggleMock(mock.id)}
-                        className="inline-flex size-8 items-center justify-center rounded-lg text-navy hover:bg-white"
-                        aria-expanded={open}
-                        aria-label={open ? "Collapse mock" : "Expand mock"}
-                      >
-                        {open ? (
-                          <ChevronDown className="size-4" />
-                        ) : (
-                          <ChevronRight className="size-4" />
-                        )}
-                      </button>
-                      <div className="min-w-0 flex-1">
-                        <Link
-                          href={`/admin/mocks/${mock.id}`}
-                          className="truncate text-[14px] font-semibold text-navy hover:text-teal"
-                        >
-                          {mock.title}
-                        </Link>
-                        <p className={cn(adminSubtext, "mt-0.5 text-[12px]")}>
-                          Catalog #{mock.catalog_number} ·{" "}
-                          {mod?.question_count ?? 0} questions
-                        </p>
-                      </div>
-                      <Link
-                        href={`/admin/mocks/${mock.id}/${skill}/1`}
-                        className={cn(adminLink, "inline-flex items-center gap-1 text-sm")}
-                      >
-                        Open builder
-                        <ChevronRight className="size-4" />
-                      </Link>
-                    </div>
-                    {open ? (
-                      <div className="flex flex-wrap gap-2 border-t border-[#EDF1F6] px-4 py-3">
-                        {partCounts.length === 0 ? (
-                          <p className={adminSubtext}>No parts configured.</p>
-                        ) : (
-                          partCounts.map((pc) => (
-                            <Link
-                              key={pc.part}
-                              href={`/admin/mocks/${mock.id}/${skill}/${pc.part}`}
-                              className={cn(
-                                "inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition",
-                                pc.question_count > 0
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                                  : "border-border-soft bg-white text-ink/70 hover:bg-ink/[0.03]",
-                              )}
-                            >
-                              {partLabel(skill, pc.part)}
-                              <span className="ml-1.5 text-xs opacity-70">
-                                {pc.question_count}
-                              </span>
-                            </Link>
-                          ))
-                        )}
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          )
-        ) : sets.length === 0 ? (
-          <div className="py-10 text-center">
-            <Library className="mx-auto size-8 text-ink/25" strokeWidth={1.5} />
-            <p className={cn(adminHeading, "mt-3 text-base")}>
-              No {skillLabel} practice sets yet
-            </p>
-            <p className={cn(adminSubtext, "mx-auto mt-1 max-w-md")}>
-              Create a set, then add questions part by part with the full{" "}
-              {skillLabel} builder — same UX as mocks, for personalized plan
-              delivery.
-            </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {archivedCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowArchived((v) => !v)}
+                className={cn(adminBtnSecondary, "text-sm")}
+              >
+                {showArchived
+                  ? "Hide archived"
+                  : `Show archived (${archivedCount})`}
+              </button>
+            ) : null}
             {!showCreate ? (
               <button
                 type="button"
                 onClick={openCreate}
-                className={cn(adminBtnPrimary, "mt-5")}
+                className={cn(adminBtnPrimary, "text-sm")}
               >
                 Create {skillLabel} set
               </button>
             ) : null}
+          </div>
+        </div>
+
+        {loading ? (
+          <p className={adminSubtext}>Loading {skillLabel.toLowerCase()}…</p>
+        ) : setsNewestFirst.length === 0 ? (
+          <div className="py-10 text-center">
+            <Library className="mx-auto size-8 text-ink/25" strokeWidth={1.5} />
+            <p className={cn(adminHeading, "mt-3 text-base")}>
+              {sets.length > 0
+                ? `No active ${skillLabel} sets`
+                : `No ${skillLabel} practice sets yet`}
+            </p>
+            <p className={cn(adminSubtext, "mx-auto mt-1 max-w-md")}>
+              {sets.length > 0
+                ? `${archivedCount} archived empty shell(s) are hidden. Show archived, or create a new set and add questions.`
+                : `Create a set, then add audio/video and questions in the ${skillLabel} builder.`}
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              {archivedCount > 0 && !showArchived ? (
+                <button
+                  type="button"
+                  onClick={() => setShowArchived(true)}
+                  className={cn(adminBtnSecondary)}
+                >
+                  Show archived ({archivedCount})
+                </button>
+              ) : null}
+              {!showCreate ? (
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className={cn(adminBtnPrimary)}
+                >
+                  Create {skillLabel} set
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : (
           <ul className="space-y-3">
@@ -562,90 +415,72 @@ export function AdminQuestionBankClient({
                         <span className={cn(adminMutedLabel, "block")}>
                           {isCustom ? (
                             <>
-                              <span className="mr-1.5 inline-flex rounded bg-cyan/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-navy">
-                                Custom
-                              </span>
-                              Set {item.set_number}
-                              {item.status ? ` · ${item.status}` : ""}
-                              {item.difficulty ? ` · ${item.difficulty}` : ""}
+                              Custom · Set {item.set_number}
+                              {item.status === "archived" ? " · Archived" : ""}
                             </>
                           ) : (
                             <>
-                              Bank {item.bank_number} · Set {item.set_number} ·{" "}
-                              {item.difficulty}
-                              {item.status ? ` · ${item.status}` : ""}
+                              Bank {item.bank_number}.{item.set_number}
+                              {item.status === "archived" ? " · Archived" : ""}
                             </>
                           )}
                         </span>
-                        <span className="mt-0.5 block truncate text-[14px] font-semibold text-navy">
+                        <span className="block truncate text-[14px] font-semibold text-navy">
                           {item.title}
                         </span>
-                        <span
-                          className={cn(adminSubtext, "mt-0.5 block text-[12px]")}
-                        >
-                          {item.total_questions} question
-                          {item.total_questions === 1 ? "" : "s"}
-                          {item.hub_slug ? ` · hub ${item.hub_slug}` : ""}
+                        <span className={cn(adminSubtext, "mt-0.5 block text-[12px]")}>
+                          {item.total_questions} questions · {item.status}
                         </span>
                       </span>
                     </button>
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
-                      {item.status !== "published" ? (
-                        <button
-                          type="button"
-                          onClick={() => void patchSetStatus(item, "published")}
-                          disabled={statusBusyId === item.set_id}
-                          className={cn(adminBtnPrimary, "px-3 py-2 text-sm")}
-                        >
-                          {statusBusyId === item.set_id
-                            ? "Publishing…"
-                            : "Publish"}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => void patchSetStatus(item, "draft")}
-                          disabled={statusBusyId === item.set_id}
-                          className={cn(adminBtnSecondary, "px-3 py-2 text-sm")}
-                        >
-                          {statusBusyId === item.set_id
-                            ? "Updating…"
-                            : "Unpublish"}
-                        </button>
-                      )}
+                    <div className="flex flex-wrap items-center gap-2">
                       {item.status !== "archived" ? (
                         <button
                           type="button"
-                          onClick={() => void patchSetStatus(item, "archived")}
                           disabled={statusBusyId === item.set_id}
-                          className={cn(adminBtnSecondary, "px-3 py-2 text-sm")}
+                          onClick={() =>
+                            void patchSetStatus(
+                              item,
+                              item.status === "published" ? "draft" : "published",
+                            )
+                          }
+                          className={cn(adminBtnSecondary, "text-sm")}
                         >
-                          Archive
+                          {item.status === "published" ? "Unpublish" : "Publish"}
                         </button>
                       ) : null}
                       {isCustom ? (
                         <button
                           type="button"
-                          onClick={() => requestDeleteCustomSet(item)}
                           disabled={deletingSetId === item.set_id}
+                          onClick={() => requestDeleteCustomSet(item)}
                           className={cn(
                             adminBtnSecondary,
-                            "inline-flex items-center gap-1.5 border-rose-200 px-3 py-2 text-sm text-rose-700 hover:bg-rose-50",
+                            "inline-flex items-center gap-1 text-sm text-rose-700",
                           )}
                           aria-label={`Delete ${item.title}`}
                         >
-                          <Trash2 className="size-3.5" aria-hidden />
-                          {deletingSetId === item.set_id ? "Deleting…" : "Delete"}
+                          <Trash2 className="size-3.5" />
+                          Delete
+                        </button>
+                      ) : item.status !== "archived" ? (
+                        <button
+                          type="button"
+                          disabled={statusBusyId === item.set_id}
+                          onClick={() => void patchSetStatus(item, "archived")}
+                          className={cn(adminBtnSecondary, "text-sm")}
+                        >
+                          Archive
                         </button>
                       ) : null}
                       <Link
                         href={`/admin/question-bank/${skill}/${item.set_id}/1`}
                         className={cn(
-                          adminBtnPrimary,
+                          adminLink,
                           "inline-flex items-center gap-1 text-sm",
                         )}
                       >
-                        Edit part 1
+                        Edit set
                         <ChevronRight className="size-4" />
                       </Link>
                     </div>

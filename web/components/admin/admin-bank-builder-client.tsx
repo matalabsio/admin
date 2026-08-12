@@ -23,10 +23,10 @@ import { cn } from "@/lib/utils";
 const adminTextarea = cn(adminInput, "min-h-[88px] resize-y py-2");
 
 const PART_COUNTS: Record<string, number> = {
-  listening: 4,
-  reading: 4,
-  writing: 2,
-  speaking: 3,
+  listening: 1,
+  reading: 1,
+  writing: 1,
+  speaking: 1,
 };
 
 type Props = {
@@ -199,7 +199,11 @@ export function AdminBankBuilderClient({ skill, setId, part }: Props) {
   return (
     <div className="space-y-6">
       <AdminPageHeader
-        title={`${skill[0]!.toUpperCase()}${skill.slice(1)} · Part ${safePart}`}
+        title={
+          partCount <= 1
+            ? `${skill[0]!.toUpperCase()}${skill.slice(1)} set`
+            : `${skill[0]!.toUpperCase()}${skill.slice(1)} · Part ${safePart}`
+        }
         subtitle="Question bank builder — content feeds practice hub Submit on the personalized plan."
       />
 
@@ -207,20 +211,22 @@ export function AdminBankBuilderClient({ skill, setId, part }: Props) {
         <Link href="/admin/question-bank" className={adminBtnSecondary}>
           All sets
         </Link>
-        {Array.from({ length: partCount }, (_, i) => i + 1).map((p) => (
-          <Link
-            key={p}
-            href={`/admin/question-bank/${skill}/${setId}/${p}`}
-            className={cn(
-              "rounded-md border px-3 py-1.5 text-sm font-medium",
-              p === safePart
-                ? "border-navy bg-navy text-white"
-                : "border-border-soft bg-white text-ink/70 hover:bg-ink/[0.03]",
-            )}
-          >
-            Part {p}
-          </Link>
-        ))}
+        {partCount > 1
+          ? Array.from({ length: partCount }, (_, i) => i + 1).map((p) => (
+              <Link
+                key={p}
+                href={`/admin/question-bank/${skill}/${setId}/${p}`}
+                className={cn(
+                  "rounded-md border px-3 py-1.5 text-sm font-medium",
+                  p === safePart
+                    ? "border-navy bg-navy text-white"
+                    : "border-border-soft bg-white text-ink/70 hover:bg-ink/[0.03]",
+                )}
+              >
+                Part {p}
+              </Link>
+            ))
+          : null}
       </div>
 
       {error ? (

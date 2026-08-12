@@ -12,6 +12,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { Upload as TusUpload } from "tus-js-client";
 import {
   adminApi,
   defaultListeningAudioKey,
@@ -33,9 +34,17 @@ import {
   adminHeading,
   adminInput,
   adminLink,
+  adminMeta,
   adminMutedLabel,
+  adminSubtext,
 } from "@/components/admin/admin-ui";
 import { cn } from "@/lib/utils";
+import {
+  STREAM_SOFT_MAX_BYTES,
+  STREAM_TUS_CHUNK_BYTES,
+  formatVideoBytes,
+  prepareVideoForStreamUpload,
+} from "@/lib/stream-video-upload";
 
 const ALL_TYPES = [
   "Form completion",
@@ -199,6 +208,7 @@ type Props = { source: BuilderSource; part: number };
 export function AdminListeningBuilderClient({ source, part }: Props) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
 
   const [questions, setQuestions] = useState<LocalQuestion[]>([]);
   const [selectedType, setSelectedType] = useState<string>(ALL_TYPES[0]);
@@ -210,6 +220,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [videoUploading, setVideoUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [mockTitle, setMockTitle] = useState("");
@@ -221,6 +232,17 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [audioInR2, setAudioInR2] = useState<boolean | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  const [videoKey, setVideoKey] = useState<string | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const [videoInR2, setVideoInR2] = useState<boolean | null>(null);
+  const [pendingVideo, setPendingVideo] = useState<File | null>(null);
+  const [videoPhase, setVideoPhase] = useState<"idle" | "compress" | "upload">(
+    "idle",
+  );
+  const [videoProgress, setVideoProgress] = useState<number | null>(null);
+
+  const isBank = source.kind === "bank";
 
   const expectedKey = useMemo(
     () =>
@@ -245,9 +267,16 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
       .getQuestionBankSet(source.setId)
       .then((s) => {
         setMockTitle(s.title || "");
-        setPartCount(4);
+        // Bank sets are one unit; still surface legacy multi-part if present.
+        const parts = Math.max(
+          1,
+          ...(s.sections ?? []).map((sec) => sec.part),
+        );
+        setPartCount(parts);
       })
-      .catch(() => {});
+      .catch(() => {
+        setPartCount(1);
+      });
   }, [source]);
 
   const refreshAudioStatus = useCallback(
@@ -277,6 +306,26 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
     [expectedKey, source, part],
   );
 
+  const refreshWatchVideoStatus = useCallback(async () => {
+    if (source.kind !== "bank") {
+      setVideoInR2(null);
+      setVideoKey(null);
+      setVideoPreviewUrl(null);
+      return false;
+    }
+    try {
+      const res = await adminApi.checkBankWatchVideo(source.setId);
+      const ok = Boolean(res.playable ?? res.exists);
+      setVideoInR2(ok);
+      setVideoKey(res.intro_stream_uid);
+      setVideoPreviewUrl(res.preview_url);
+      return ok;
+    } catch {
+      setVideoInR2(null);
+      return false;
+    }
+  }, [source]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -290,10 +339,8 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
       if (keyFromDb) {
         setAudioKey(keyFromDb);
         setAudioName(keyFromDb.split("/").pop() || keyFromDb);
-        // R2 existence check is secondary — don't block the editor on it
         void refreshAudioStatus(keyFromDb);
       } else {
-        // Audio may already be in R2 from a prior upload before questions were saved
         void refreshAudioStatus(expectedKey).then((ok) => {
           if (!ok) {
             setAudioKey("");
@@ -301,12 +348,15 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
           }
         });
       }
+      if (source.kind === "bank") {
+        void refreshWatchVideoStatus();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
       setLoading(false);
     }
-  }, [expectedKey, source, part, refreshAudioStatus]);
+  }, [expectedKey, source, part, refreshAudioStatus, refreshWatchVideoStatus]);
 
   useEffect(() => {
     void load();
@@ -369,7 +419,6 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
       setAudioName(pendingFile.name || key.split("/").pop() || key);
       setAudioInR2(true);
       setPendingFile(null);
-      // Confirm object is readable in R2 (does not clear local key on failure)
       const ok = await refreshAudioStatus(key);
       setSaveMsg(
         ok
@@ -381,6 +430,84 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
       setError(e instanceof Error ? e.message : "Audio upload failed");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function uploadWatchVideo() {
+    if (source.kind !== "bank") {
+      setError("Set Watch video is only available for question-bank sets.");
+      return;
+    }
+    if (!pendingVideo) {
+      setError("Choose a compressed video first.");
+      return;
+    }
+    setVideoUploading(true);
+    setError(null);
+    setSaveMsg(null);
+    setVideoPhase("compress");
+    setVideoProgress(0);
+    try {
+      const prepared = await prepareVideoForStreamUpload(
+        pendingVideo,
+        (p, pct) => {
+          setVideoPhase(p === "compress" ? "compress" : "upload");
+          if (p === "compress") setVideoProgress(pct);
+        },
+      );
+      setVideoPhase("upload");
+      setVideoProgress(0);
+      const created = await adminApi.createBankWatchVideoDirectUpload(
+        source.setId,
+        {
+          upload_length: prepared.file.size,
+          title: "Set Watch explainer",
+        },
+      );
+      await new Promise<void>((resolve, reject) => {
+        const upload = new TusUpload(prepared.file, {
+          endpoint: created.uploadURL,
+          chunkSize: STREAM_TUS_CHUNK_BYTES,
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          metadata: {
+            filename: prepared.file.name,
+            filetype: prepared.file.type || "video/mp4",
+          },
+          onError: (err) => reject(err),
+          onProgress: (bytesUploaded, bytesTotal) => {
+            if (bytesTotal > 0) {
+              setVideoProgress(
+                Math.round((bytesUploaded / bytesTotal) * 100),
+              );
+            }
+          },
+          onSuccess: () => resolve(),
+        });
+        upload.start();
+      });
+      const res = await adminApi.completeBankWatchVideo(source.setId, {
+        stream_uid: created.uid,
+        title: "Set Watch explainer",
+      });
+      setVideoKey(res.intro_stream_uid);
+      setVideoPreviewUrl(res.preview_url || null);
+      setVideoInR2(true);
+      setPendingVideo(null);
+      if (videoInputRef.current) videoInputRef.current.value = "";
+      const shrink = prepared.compressed
+        ? ` Compressed ${formatVideoBytes(prepared.originalBytes)} → ${formatVideoBytes(prepared.finalBytes)}.`
+        : "";
+      setSaveMsg(
+        `Set Watch video on Cloudflare Stream (signed).${shrink} Bare UID will not play — students get short-lived tokens only.`,
+      );
+      setVideoProgress(100);
+      await refreshWatchVideoStatus();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Video upload failed");
+      setVideoProgress(null);
+    } finally {
+      setVideoUploading(false);
+      setVideoPhase("idle");
     }
   }
 
@@ -596,7 +723,9 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
             </button>
           }
         />
-        <PartTabs source={source} part={part} partCount={partCount} />
+        {partCount > 1 ? (
+          <PartTabs source={source} part={part} partCount={partCount} />
+        ) : null}
         <div className={cn(adminCard, "mt-6")}>
           <span className="mb-4 inline-block rounded-full bg-[#EEF1F5] px-3 py-1 font-mono text-[10px] font-medium uppercase tracking-wider text-[#64748B]">
             Student preview
@@ -682,7 +811,9 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
         }
       />
 
-      <PartTabs source={source} part={part} partCount={partCount} />
+      {partCount > 1 ? (
+        <PartTabs source={source} part={part} partCount={partCount} />
+      ) : null}
 
       {error && (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -702,77 +833,206 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
         </div>
       )}
 
-      {/* Audio panel */}
-      <div className={cn(adminCard, "mt-6")}>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className={cn(adminHeading, "text-[17px]")}>Audio · Part {part}</h2>
-          <span className="font-mono text-xs text-[#94A3B8]">
-            {audioInR2 === true
-              ? "R2 ready"
-              : audioInR2 === false
-                ? "Not in R2"
-                : "—"}
-          </span>
-        </div>
+      {/* Media: 50/50 audio (part) + locked set Watch video */}
+      <div
+        className={cn(
+          adminCard,
+          "mt-6 grid gap-6 lg:grid-cols-2 lg:gap-0 lg:divide-x lg:divide-[#EAEEF3]",
+        )}
+      >
+        <div className="lg:pr-6">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <p className={adminMutedLabel}>Part audio</p>
+              <h2 className={cn(adminHeading, "mt-1 text-[17px]")}>
+                Audio · Part {part}
+              </h2>
+            </div>
+            <span className="font-mono text-xs text-[#94A3B8]">
+              {audioInR2 === true
+                ? "R2 ready"
+                : audioInR2 === false
+                  ? "Not in R2"
+                  : "—"}
+            </span>
+          </div>
 
-        <audio
-          ref={audioRef}
-          src={previewAudioSrc}
-          onEnded={() => setIsPlaying(false)}
-          className="hidden"
-        >
-          <track kind="captions" />
-        </audio>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="audio/mpeg,.mp3,audio/*"
+          <audio
+            ref={audioRef}
+            src={previewAudioSrc}
+            onEnded={() => setIsPlaying(false)}
             className="hidden"
-            onChange={(e) => onFileChosen(e.target.files?.[0] ?? null)}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className={cn(adminBtnSecondary, "gap-2")}
           >
-            <Upload className="size-4" />
-            Choose MP3
-          </button>
-          <button
-            type="button"
-            disabled={!previewAudioSrc}
-            onClick={togglePlay}
-            className={cn(adminBtnSecondary, "gap-2")}
-          >
-            {isPlaying ? (
-              <Pause className="size-4" />
-            ) : (
-              <Play className="size-4" />
-            )}
-            {isPlaying ? "Pause" : "Play"}
-          </button>
-          <button
-            type="button"
-            disabled={uploading || !pendingFile}
-            onClick={() => void uploadAudio()}
-            className={adminBtnPrimary}
-          >
-            {uploading ? "Uploading…" : "Upload to R2"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void refreshAudioStatus()}
-            className={adminBtnSecondary}
-          >
-            Check R2
-          </button>
+            <track kind="captions" />
+          </audio>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="audio/mpeg,.mp3,audio/*"
+              className="hidden"
+              onChange={(e) => onFileChosen(e.target.files?.[0] ?? null)}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className={cn(adminBtnSecondary, "gap-2")}
+            >
+              <Upload className="size-4" />
+              Choose MP3
+            </button>
+            <button
+              type="button"
+              disabled={!previewAudioSrc}
+              onClick={togglePlay}
+              className={cn(adminBtnSecondary, "gap-2")}
+            >
+              {isPlaying ? (
+                <Pause className="size-4" />
+              ) : (
+                <Play className="size-4" />
+              )}
+              {isPlaying ? "Pause" : "Play"}
+            </button>
+            <button
+              type="button"
+              disabled={uploading || !pendingFile}
+              onClick={() => void uploadAudio()}
+              className={adminBtnPrimary}
+            >
+              {uploading ? "Uploading…" : "Upload to R2"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void refreshAudioStatus()}
+              className={adminBtnSecondary}
+            >
+              Check R2
+            </button>
+          </div>
+          <p className={cn(adminMeta, "mt-3")}>
+            {audioName || "No file selected"}
+            {audioKey ? ` · ${audioKey}` : ` · expected ${expectedKey}`}
+          </p>
         </div>
-        <p className="mt-3 font-mono text-xs text-[#94A3B8]">
-          {audioName || "No file selected"}
-          {audioKey ? ` · ${audioKey}` : ` · expected ${expectedKey}`}
-        </p>
+
+        <div className="lg:pl-6">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <p className={adminMutedLabel}>Set Watch video</p>
+              <h2 className={cn(adminHeading, "mt-1 text-[17px]")}>
+                Locked Stream explainer
+              </h2>
+            </div>
+            <span className="font-mono text-xs text-[#94A3B8]">
+              {!isBank
+                ? "Bank sets only"
+                : videoInR2 === true
+                  ? "Stream locked"
+                  : videoInR2 === false
+                    ? "Not uploaded"
+                    : "—"}
+            </span>
+          </div>
+
+          {isBank ? (
+            <>
+              {videoPreviewUrl ? (
+                <div className="mb-4 overflow-hidden rounded-[14px] border border-[#EAEEF3] bg-black">
+                  <iframe
+                    key={videoPreviewUrl}
+                    title="Set Watch preview"
+                    src={videoPreviewUrl}
+                    className="aspect-video w-full"
+                    allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              ) : null}
+
+              <input
+                ref={videoInputRef}
+                type="file"
+                accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                className="hidden"
+                disabled={videoUploading}
+                onChange={(e) => {
+                  setPendingVideo(e.target.files?.[0] ?? null);
+                  setError(null);
+                }}
+              />
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  className={cn(adminBtnSecondary, "gap-2")}
+                  disabled={videoUploading}
+                  onClick={() => videoInputRef.current?.click()}
+                >
+                  <Upload className="size-4" />
+                  Choose video
+                </button>
+                <button
+                  type="button"
+                  className={adminBtnPrimary}
+                  disabled={videoUploading || !pendingVideo}
+                  onClick={() => void uploadWatchVideo()}
+                >
+                  {videoUploading
+                    ? videoPhase === "compress"
+                      ? "Compressing…"
+                      : "Uploading to Stream…"
+                    : videoKey
+                      ? "Replace on Stream"
+                      : "Upload to Stream"}
+                </button>
+                <button
+                  type="button"
+                  className={adminBtnSecondary}
+                  disabled={videoUploading}
+                  onClick={() => void refreshWatchVideoStatus()}
+                >
+                  Check Stream
+                </button>
+              </div>
+              {pendingVideo ? (
+                <p className={cn(adminMeta, "mt-3")}>
+                  {pendingVideo.name} · {formatVideoBytes(pendingVideo.size)}
+                  {pendingVideo.size > STREAM_SOFT_MAX_BYTES
+                    ? " · will compress before upload"
+                    : " · ready"}
+                </p>
+              ) : (
+                <p className={cn(adminMeta, "mt-3")}>
+                  {videoKey
+                    ? `Stream UID · ${videoKey} (signed playback)`
+                    : `Prefer compressed MP4 ≤ ${formatVideoBytes(STREAM_SOFT_MAX_BYTES)}`}
+                </p>
+              )}
+              {videoProgress != null ? (
+                <div className="mt-3">
+                  <div className="h-2 overflow-hidden rounded-full bg-[#EEF2F6]">
+                    <div
+                      className="h-full rounded-full bg-cyan transition-[width]"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, videoProgress))}%`,
+                      }}
+                    />
+                  </div>
+                  <p className={cn(adminMeta, "mt-1")}>
+                    {videoPhase === "compress" ? "Compressing" : "Uploading"} ·{" "}
+                    {videoProgress}%
+                  </p>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className={cn(adminSubtext, "mt-2")}>
+              Open this listening part from a question-bank set to attach a
+              signed Stream Watch video for that set.
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Question type selector */}
@@ -1115,6 +1375,7 @@ function PartTabs({
   partCount: number;
 }) {
   const count = Math.max(1, Math.min(4, partCount || 1));
+  if (count <= 1) return null;
   return (
     <div className="mt-5 flex flex-wrap items-center gap-2">
       <span className={adminMutedLabel}>Parts</span>

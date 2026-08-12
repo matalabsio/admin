@@ -96,9 +96,11 @@ export function AdminTopNav() {
     <>
       <header className="border-b border-white/[0.06] bg-navy">
         <div className="mx-auto flex h-[66px] max-w-[1320px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-6 lg:gap-8">
+          <div className="flex min-w-0 flex-1 items-center gap-4 lg:gap-8">
             <AdminWordmark />
-            <div className="hidden lg:block">{navLinks}</div>
+            <div className="min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="min-w-max pr-2">{navLinks}</div>
+            </div>
           </div>
 
           <div className="flex items-center gap-3 sm:gap-[18px]">

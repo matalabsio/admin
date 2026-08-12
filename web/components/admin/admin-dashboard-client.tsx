@@ -52,8 +52,16 @@ import {
   adminLink,
   adminMutedLabel,
 } from "@/components/admin/admin-ui";
-import { adminApi, type AdminMockListItem, type DashboardOverview } from "@/lib/admin-api";
+import {
+  adminApi,
+  type AdminMockListItem,
+  type DashboardOverview,
+  type QuestionBankSetItem,
+} from "@/lib/admin-api";
 import { cn } from "@/lib/utils";
+
+const PRACTICE_SKILLS = ["listening", "reading", "writing", "speaking"] as const;
+type PracticeSkill = (typeof PRACTICE_SKILLS)[number];
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -80,13 +88,6 @@ function activityDotClass(kind: string): string {
   if (kind === "mock_attempt") return "bg-navy";
   if (kind === "speaking_review") return "bg-[#B7791F]";
   return "bg-[#94A3B8]";
-}
-
-function sumModuleQuestions(mocks: AdminMockListItem[], module: string): number {
-  return mocks.reduce((sum, mock) => {
-    const mod = mock.modules.find((m) => m.module === module);
-    return sum + (mod?.question_count ?? 0);
-  }, 0);
 }
 
 const CATALOG_MODULES = ["listening", "reading", "writing", "speaking"] as const;
@@ -223,6 +224,14 @@ export function AdminDashboardClient() {
   const router = useRouter();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [mocks, setMocks] = useState<AdminMockListItem[]>([]);
+  const [practiceBySkill, setPracticeBySkill] = useState<
+    Record<PracticeSkill, QuestionBankSetItem[]>
+  >({
+    listening: [],
+    reading: [],
+    writing: [],
+    speaking: [],
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -232,13 +241,24 @@ export function AdminDashboardClient() {
     let cancelled = false;
     (async () => {
       try {
-        const [ov, mockList] = await Promise.all([
+        const [ov, mockList, ...practiceLists] = await Promise.all([
           adminApi.dashboardOverview(),
           adminApi.listMocks(),
+          ...PRACTICE_SKILLS.map((skill) => adminApi.listQuestionBank(skill)),
         ]);
         if (!cancelled) {
           setOverview(ov);
           setMocks(mockList);
+          const next: Record<PracticeSkill, QuestionBankSetItem[]> = {
+            listening: [],
+            reading: [],
+            writing: [],
+            speaking: [],
+          };
+          PRACTICE_SKILLS.forEach((skill, i) => {
+            next[skill] = practiceLists[i]?.sets ?? [];
+          });
+          setPracticeBySkill(next);
           setRecentActivityVisible(RECENT_ACTIVITY_INITIAL);
         }
       } catch (e) {
@@ -262,33 +282,16 @@ export function AdminDashboardClient() {
   const comingSoonCount = Math.max(0, 6 - liveCount);
 
   const moduleBars: BarItem[] = useMemo(
-    () => [
-      {
-        label: "listening",
-        value: sumModuleQuestions(liveMocks, "listening"),
+    () =>
+      PRACTICE_SKILLS.map((skill) => ({
+        label: skill,
+        value: practiceBySkill[skill]
+          .filter((s) => s.status !== "archived")
+          .reduce((sum, set) => sum + set.total_questions, 0),
         color: "#00BCD4",
-        href: "/admin/question-bank/overview",
-      },
-      {
-        label: "reading",
-        value: sumModuleQuestions(liveMocks, "reading"),
-        color: "#00BCD4",
-        href: "/admin/question-bank/overview",
-      },
-      {
-        label: "writing",
-        value: sumModuleQuestions(liveMocks, "writing"),
-        color: "#00BCD4",
-        href: "/admin/question-bank/overview",
-      },
-      {
-        label: "speaking",
-        value: sumModuleQuestions(liveMocks, "speaking"),
-        color: "#00BCD4",
-        href: "/admin/question-bank/overview",
-      },
-    ],
-    [liveMocks],
+        href: `/admin/question-bank?tab=practice&skill=${skill}`,
+      })),
+    [practiceBySkill],
   );
 
   const catalogModules: CatalogModuleStat[] = useMemo(() => {
@@ -433,22 +436,26 @@ export function AdminDashboardClient() {
         />
       ) : null}
 
-      {/* Question bank + Recent mocks — primary content cards */}
+      {/* Question bank (admin sets) + Recent mocks (catalog) */}
       <section className="grid gap-4 lg:grid-cols-[1fr_1.25fr]">
         <AdminChartCard
           title="Question bank"
-          subtitle="Questions per module (live mocks)"
+          subtitle="Admin-uploaded practice sets (personalized)"
           className="min-w-0"
           headerExtra={
             <Link
-              href="/admin/question-bank/overview"
+              href="/admin/question-bank?tab=practice&skill=listening"
               className={adminLink}
             >
               View details
             </Link>
           }
         >
-          <HorizontalBarChart items={moduleBars} />
+          <HorizontalBarChart
+            items={moduleBars}
+            detailsHref="/admin/question-bank?tab=practice&skill=listening"
+            totalLabel="practice questions"
+          />
         </AdminChartCard>
 
         <div className={cn(adminCard, "flex h-full min-w-0 flex-col")}>
