@@ -123,6 +123,12 @@ export function parseApiError(body: ApiErrorBody, status: number): string {
     return (body.detail as { message: string }).message;
   }
   const fallback = body.error ?? body.message ?? `Request failed (${status})`;
+  if (
+    status === 413 ||
+    /FUNCTION_PAYLOAD_TOO_LARGE|Request Entity Too Large/i.test(fallback)
+  ) {
+    return "This file is too large for the Vercel upload proxy. Use direct R2 upload (presigned PUT).";
+  }
   if (status === 500 && fallback === "Internal Server Error") {
     return (
       "Could not complete the request. Check that the backend is running and " +

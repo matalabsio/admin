@@ -46,6 +46,24 @@ async function adminDownload(path: string, fallbackFilename: string): Promise<vo
   URL.revokeObjectURL(url);
 }
 
+async function putFileToSignedUrl(
+  uploadUrl: string,
+  file: File,
+  contentType: string,
+): Promise<void> {
+  const res = await fetch(uploadUrl, {
+    method: "PUT",
+    body: file,
+    headers: { "Content-Type": contentType },
+  });
+  if (!res.ok) {
+    throw new ApiError(
+      `Direct R2 upload failed (${res.status}). Check R2 CORS for this admin origin.`,
+      res.status,
+    );
+  }
+}
+
 async function adminMultipartCall<T>(path: string, formData: FormData): Promise<T> {
   const res = await fetch(`/api/admin${path}`, {
     method: "POST",
@@ -985,13 +1003,25 @@ export const adminApi = {
     });
   },
 
-  uploadListeningAudio(mockId: string, part: number, file: File) {
-    const formData = new FormData();
-    formData.append("file", file);
-    return adminMultipartCall<{ ok: boolean; audio_key: string }>(
-      `/mocks/${mockId}/ingest/audio?part=${part}`,
-      formData,
+  async uploadListeningAudio(mockId: string, part: number, file: File) {
+    const session = await adminCall<{
+      ok: boolean;
+      audio_key: string;
+      upload_url: string;
+      content_type: string;
+    }>(`/mocks/${mockId}/ingest/audio-upload-url?part=${part}`, {
+      method: "POST",
+      body: JSON.stringify({
+        size_bytes: file.size,
+        content_type: file.type || "audio/mpeg",
+      }),
+    });
+    await putFileToSignedUrl(
+      session.upload_url,
+      file,
+      session.content_type || "audio/mpeg",
     );
+    return { ok: true as const, audio_key: session.audio_key };
   },
 
   checkListeningAudio(mockId: string, part: number, key?: string) {
@@ -1561,13 +1591,30 @@ export const adminApi = {
     });
   },
 
-  uploadBankListeningAudio(setId: string, part: number, file: File) {
-    const formData = new FormData();
-    formData.append("file", file);
-    return adminMultipartCall<{ ok: boolean; audio_key: string; part: number }>(
-      `/question-bank/sets/${setId}/listening/${part}/audio`,
-      formData,
+  async uploadBankListeningAudio(setId: string, part: number, file: File) {
+    const session = await adminCall<{
+      ok: boolean;
+      audio_key: string;
+      upload_url: string;
+      content_type: string;
+      part: number;
+    }>(`/question-bank/sets/${setId}/listening/${part}/audio-upload-url`, {
+      method: "POST",
+      body: JSON.stringify({
+        size_bytes: file.size,
+        content_type: file.type || "audio/mpeg",
+      }),
+    });
+    await putFileToSignedUrl(
+      session.upload_url,
+      file,
+      session.content_type || "audio/mpeg",
     );
+    return {
+      ok: true as const,
+      audio_key: session.audio_key,
+      part: session.part ?? part,
+    };
   },
 
   checkBankListeningAudio(setId: string, part: number, audioKey?: string) {
