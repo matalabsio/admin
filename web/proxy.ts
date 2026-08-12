@@ -4,7 +4,7 @@ import { middlewareRefreshAuth } from "@/lib/auth-middleware-refresh";
 import { isAuthEnabled } from "@/lib/flags";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/session";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (!isAuthEnabled()) {

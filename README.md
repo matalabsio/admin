@@ -67,7 +67,7 @@ npm run dev                  # http://127.0.0.1:3000 — no /admin routes
 |----------|--------|---------|
 | `ADMIN_ALLOWED_EMAIL` | backend + `admin/web` | Fail-closed allowlist for admin role access |
 | `API_URL` / `NEXT_PUBLIC_API_URL` | `admin/web` | FastAPI base URL for BFF proxy |
-| `NEXT_PUBLIC_AUTH_ENABLED` | `admin/web` | Must be `true` for session middleware |
+| `NEXT_PUBLIC_AUTH_ENABLED` | `admin/web` | Must be `true` for session proxy gates |
 
 Set the same admin email on the backend and admin web.
 

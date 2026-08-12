@@ -13,10 +13,10 @@ function isMisconfiguredAuthEnabledApiUrl(value: string | undefined): boolean {
   return flag.startsWith("http://") || flag.startsWith("https://");
 }
 
-/** Auth gates (middleware, modals, protected pages) — off until NEXT_PUBLIC_AUTH_ENABLED=true */
+/** Auth gates (proxy, modals, protected pages) — off until NEXT_PUBLIC_AUTH_ENABLED=true */
 export function isAuthEnabled(): boolean {
   if (isTruthyEnvFlag(process.env.NEXT_PUBLIC_AUTH_ENABLED)) return true;
-  // Runtime override on Vercel — no redeploy needed for server routes / middleware.
+  // Runtime override on Vercel — no redeploy needed for server routes / proxy.
   if (isTruthyEnvFlag(process.env.AUTH_ENABLED)) return true;
   // Recover when NEXT_PUBLIC_AUTH_ENABLED was set to the API URL by mistake.
   if (isMisconfiguredAuthEnabledApiUrl(process.env.NEXT_PUBLIC_AUTH_ENABLED)) {
