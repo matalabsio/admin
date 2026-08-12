@@ -6,11 +6,12 @@ function stripTrailingSlash(url: string): string {
 const LEGACY_RAILWAY_API_HOSTS = new Set([
   "bandforge-api-production-6b30.up.railway.app",
   "adequate-surprise-production-0f84.up.railway.app",
+  "adequate-surprise-production-96bc.up.railway.app",
 ]);
 
-/** Current Railway API (adequate-surprise). Override with API_URL on Vercel (no redeploy). */
+/** Current Railway API. Override with API_URL on Vercel (no redeploy). */
 export const DEFAULT_RAILWAY_API_URL =
-  "https://adequate-surprise-production-96bc.up.railway.app";
+  "https://backend-production-a813.up.railway.app";
 
 function normalizeApiUrl(url: string): string {
   if (!url) return url;

@@ -35,7 +35,7 @@ Browser  →  https://<admin>.vercel.app
 Verify API:
 
 ```bash
-curl -fsS https://adequate-surprise-production-96bc.up.railway.app/health
+curl -fsS https://backend-production-a813.up.railway.app/health
 ```
 
 ---
@@ -99,7 +99,7 @@ Apply to **Production** and **Preview**:
 
 | Variable | Value | Required |
 |----------|--------|----------|
-| `API_URL` | `https://adequate-surprise-production-96bc.up.railway.app` | Yes (runtime; preferred) |
+| `API_URL` | `https://backend-production-a813.up.railway.app` | Yes (runtime; preferred) |
 | `NEXT_PUBLIC_API_URL` | same Railway URL | Yes (build-time fallback) |
 | `NEXT_PUBLIC_AUTH_ENABLED` | `true` | Yes |
 | `ADMIN_ALLOWED_EMAIL` | `product@matalabs.io` | Yes — must match Railway |
@@ -107,8 +107,8 @@ Apply to **Production** and **Preview**:
 ### Copy-paste block
 
 ```env
-API_URL=https://adequate-surprise-production-96bc.up.railway.app
-NEXT_PUBLIC_API_URL=https://adequate-surprise-production-96bc.up.railway.app
+API_URL=https://backend-production-a813.up.railway.app
+NEXT_PUBLIC_API_URL=https://backend-production-a813.up.railway.app
 NEXT_PUBLIC_AUTH_ENABLED=true
 ADMIN_ALLOWED_EMAIL=product@matalabs.io
 ```
@@ -194,6 +194,7 @@ Local setup: [LOCAL_SETUP.md](./LOCAL_SETUP.md)
 | Symptom | Fix |
 |---------|-----|
 | Build fails / wrong app | Root Directory must be `web` |
+| `ENOENT` `routes-manifest-deterministic.json` after `next build` | Leave Output Directory empty; Root Directory = `web`; do not set `outputFileTracingRoot` on Vercel |
 | `503` / cannot reach API | Set `API_URL` + `NEXT_PUBLIC_API_URL` to Railway URL; redeploy |
 | Login loop | `NEXT_PUBLIC_AUTH_ENABLED=true` + redeploy; check `/api/auth/login` |
 | `403` after login | Sync `ADMIN_ALLOWED_EMAIL`; run `promote_admin.py` |
@@ -212,7 +213,7 @@ Railway:
   [ ] CORS_ORIGINS includes admin Vercel URL
 
 Vercel (import matalabsio/admin, Root Directory = web):
-  [ ] API_URL=https://adequate-surprise-production-96bc.up.railway.app
+  [ ] API_URL=https://backend-production-a813.up.railway.app
   [ ] NEXT_PUBLIC_API_URL= same
   [ ] NEXT_PUBLIC_AUTH_ENABLED=true
   [ ] ADMIN_ALLOWED_EMAIL=product@matalabs.io
