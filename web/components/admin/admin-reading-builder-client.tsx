@@ -31,6 +31,19 @@ import {
   adminMutedLabel,
 } from "@/components/admin/admin-ui";
 import { cn } from "@/lib/utils";
+import { AdminMatchingGroupEditor } from "@/components/admin/admin-matching-group-editor";
+import {
+  defaultMatchingGroup,
+  findConsecutiveTypeRange,
+  isReadingMatchingType,
+  matchingGroupError,
+  matchingGroupToQuestions,
+  matchingLabelFormat,
+  normalizeMatchingLabel,
+  questionsToMatchingGroup,
+  splitOptionLabelText,
+  type MatchingGroupDraft,
+} from "@/lib/matching-group";
 
 /* ------------------------------------------------------------------ */
 /*  Question-type configuration                                       */
@@ -61,10 +74,6 @@ const FIXED_OPTIONS: Partial<Record<QType, string[]>> = {
 };
 
 const CHECKBOX_TYPES = new Set<QType>([
-  "Matching headings",
-  "Matching information",
-  "Matching features",
-  "Matching sentence endings",
   "Summary completion (from box)",
 ]);
 
@@ -81,7 +90,8 @@ function isOptionType(t: string): boolean {
   return (
     t in FIXED_OPTIONS ||
     CHECKBOX_TYPES.has(t as QType) ||
-    t === "Multiple choice"
+    t === "Multiple choice" ||
+    isReadingMatchingType(t)
   );
 }
 function isTextType(t: string): boolean {
@@ -123,6 +133,7 @@ function toDisplay(slug: string): string {
 type DraftOption = {
   id: string;
   label: string;
+  text: string;
   correct: boolean;
   locked: boolean;
 };
@@ -157,19 +168,22 @@ function makeDefaultOptions(type: string): DraftOption[] {
     return fixed.map((l, i) => ({
       id: `fo-${i}`,
       label: l,
+      text: l,
       correct: false,
       locked: true,
     }));
   if (type === "Multiple choice")
     return ["A", "B", "C", "D"].map((l, i) => ({
       id: `mo-${i}`,
-      label: "",
+      label: l,
+      text: "",
       correct: false,
       locked: false,
     }));
   return [1, 2, 3, 4].map((n) => ({
     id: `co-${n}`,
     label: "",
+    text: "",
     correct: false,
     locked: false,
   }));
@@ -179,13 +193,20 @@ function questionToPayload(q: LocalQuestion): ReadingBuilderQuestionIn {
   let correctAnswer = q.answer;
   if (isOptionType(q.type) && q.options) {
     const selected = q.options.filter((o) => o.correct);
-    correctAnswer = selected.map((o) => o.label).join(",");
+    correctAnswer = isReadingMatchingType(q.type)
+      ? selected[0]?.label ?? ""
+      : selected.map((o) => o.label).join(",");
   }
   return {
     question_type: q.type,
     prompt: q.text,
     options: isOptionType(q.type) && q.options
-      ? q.options.map((o) => ({ label: o.label, text: o.label }))
+      ? q.options.map((o) => ({
+          label: o.label,
+          text: isReadingMatchingType(q.type)
+            ? (o.text || "").trim() || o.label
+            : o.label,
+        }))
       : null,
     correct_answer: correctAnswer,
     alt_answers: q.altAnswers.filter(Boolean),
@@ -203,12 +224,30 @@ function serverToLocal(q: ReadingBuilderQuestionOut): LocalQuestion {
     const correctSet = new Set(
       (q.correct_answer || "").split(",").map((s) => s.trim()),
     );
-    options = q.options.map((o, i) => ({
-      id: `so-${i}`,
-      label: o.label || o.text || "",
-      correct: correctSet.has(o.label || o.text || ""),
-      locked: hasFixedOptions(displayType),
-    }));
+    const format = isReadingMatchingType(displayType)
+      ? matchingLabelFormat(displayType)
+      : "letter";
+    const correctNorm = isReadingMatchingType(displayType)
+      ? normalizeMatchingLabel(q.correct_answer || "", format)
+      : "";
+    options = q.options.map((o, i) => {
+      const split = isReadingMatchingType(displayType)
+        ? splitOptionLabelText(o.label || "", o.text || "", format)
+        : { label: o.label || o.text || "", text: (o.text || "").trim() || o.label || "" };
+      return {
+        id: `so-${i}`,
+        label: split.label,
+        text: split.text,
+        correct: isReadingMatchingType(displayType)
+          ? normalizeMatchingLabel(split.label, format) === correctNorm ||
+            correctSet.has(o.label || "") ||
+            correctSet.has(split.label)
+          : correctSet.has(o.label || "") ||
+            correctSet.has(o.text || "") ||
+            correctSet.has((o.label || "").trim()),
+        locked: hasFixedOptions(displayType),
+      };
+    });
     answer = "";
   }
 
@@ -239,6 +278,13 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
   const [selectedType, setSelectedType] = useState<string>(ALL_TYPES[0]);
   const [draftOpen, setDraftOpen] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [matchingDraft, setMatchingDraft] = useState<MatchingGroupDraft | null>(
+    null,
+  );
+  const [matchingRange, setMatchingRange] = useState<{
+    start: number;
+    end: number;
+  } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [previewMode, setPreviewMode] = useState(false);
@@ -306,6 +352,8 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
   useEffect(() => {
     setDraftOpen(false);
     setDraft(null);
+    setMatchingDraft(null);
+    setMatchingRange(null);
     setEditingId(null);
     setExpanded({});
     setPreviewMode(false);
@@ -320,7 +368,17 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
 
   /* Draft management */
   function openDraft() {
+    if (isReadingMatchingType(selectedType)) {
+      setDraft(null);
+      setDraftOpen(false);
+      setEditingId(null);
+      setMatchingDraft(defaultMatchingGroup(selectedType));
+      setMatchingRange(null);
+      return;
+    }
     const isOpt = isOptionType(selectedType);
+    setMatchingDraft(null);
+    setMatchingRange(null);
     setDraft({
       type: selectedType,
       text: "",
@@ -336,6 +394,31 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
   function editQuestion(localId: string) {
     const q = questions.find((x) => x.localId === localId);
     if (!q) return;
+    if (isReadingMatchingType(q.type)) {
+      const idx = questions.findIndex((x) => x.localId === localId);
+      const range = findConsecutiveTypeRange(questions, idx);
+      const groupQs = questions.slice(range.start, range.end + 1);
+      setMatchingDraft(
+        questionsToMatchingGroup(
+          q.type,
+          groupQs.map((item) => ({
+            localId: item.localId,
+            serverId: item.serverId,
+            prompt: item.text,
+            options: item.options,
+            difficulty: item.difficulty,
+          })),
+        ),
+      );
+      setMatchingRange(range);
+      setDraft(null);
+      setDraftOpen(false);
+      setSelectedType(q.type);
+      setEditingId(null);
+      return;
+    }
+    setMatchingDraft(null);
+    setMatchingRange(null);
     setDraft({
       type: q.type,
       text: q.text,
@@ -356,6 +439,46 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
     setDraft(null);
     setEditingId(null);
     setDraftOpen(false);
+    setMatchingDraft(null);
+    setMatchingRange(null);
+  }
+
+  function saveMatchingGroup() {
+    if (!matchingDraft) return;
+    const err = matchingGroupError(matchingDraft);
+    if (err) {
+      setError(err);
+      return;
+    }
+    const built = matchingGroupToQuestions(matchingDraft);
+    const records: LocalQuestion[] = built.map((q) => ({
+      localId: q.localId,
+      serverId: q.serverId,
+      type: q.type,
+      text: q.prompt,
+      options: q.options.map((o, i) => ({
+        id: `mo-${q.localId}-${i}`,
+        label: o.label,
+        text: o.text,
+        correct: o.correct,
+        locked: false,
+      })),
+      answer: "",
+      altAnswers: [],
+      difficulty: q.difficulty,
+    }));
+    setError(null);
+    setQuestions((prev) => {
+      if (matchingRange) {
+        return [
+          ...prev.slice(0, matchingRange.start),
+          ...records,
+          ...prev.slice(matchingRange.end + 1),
+        ];
+      }
+      return [...prev, ...records];
+    });
+    cancelDraft();
   }
 
   function saveDraft() {
@@ -439,7 +562,13 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
       ...draft,
       options: [
         ...draft.options,
-        { id: `no-${Date.now()}`, label: "", correct: false, locked: false },
+        {
+          id: `no-${Date.now()}`,
+          label: "",
+          text: "",
+          correct: false,
+          locked: false,
+        },
       ],
     });
   }
@@ -725,6 +854,16 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
         </button>
       </div>
 
+      {matchingDraft ? (
+        <AdminMatchingGroupEditor
+          draft={matchingDraft}
+          editing={matchingRange != null}
+          onChange={setMatchingDraft}
+          onSave={saveMatchingGroup}
+          onCancel={cancelDraft}
+        />
+      ) : null}
+
       {/* Draft question card */}
       {draftOpen && draft && (
         <div className="mt-5 rounded-[18px] border-[1.5px] border-cyan/40 bg-cyan-soft/20 p-6">
@@ -771,7 +910,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
           />
 
           {/* Option-based types */}
-          {isOptionType(draft.type) && (
+          {isOptionType(draft.type) && !isReadingMatchingType(draft.type) && (
             <>
               <div className="mb-2.5 flex items-center justify-between">
                 <span className={adminMutedLabel}>

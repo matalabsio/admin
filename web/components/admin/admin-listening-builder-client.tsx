@@ -39,6 +39,16 @@ import {
   adminSubtext,
 } from "@/components/admin/admin-ui";
 import { cn } from "@/lib/utils";
+import { AdminMatchingGroupEditor } from "@/components/admin/admin-matching-group-editor";
+import {
+  defaultMatchingGroup,
+  findConsecutiveTypeRange,
+  isListeningMatchingType,
+  matchingGroupError,
+  matchingGroupToQuestions,
+  questionsToMatchingGroup,
+  type MatchingGroupDraft,
+} from "@/lib/matching-group";
 import {
   STREAM_SOFT_MAX_BYTES,
   STREAM_TUS_CHUNK_BYTES,
@@ -63,7 +73,6 @@ type QType = (typeof ALL_TYPES)[number];
 
 const RADIO_TYPES = new Set<QType>([
   "MCQ — single answer",
-  "Matching",
   "Map/plan/diagram labelling",
 ]);
 const CHECKBOX_TWO = new Set<QType>(["MCQ — choose TWO"]);
@@ -77,7 +86,11 @@ const TEXT_TYPES = new Set<QType>([
 ]);
 
 function isOptionType(t: string): boolean {
-  return RADIO_TYPES.has(t as QType) || CHECKBOX_TWO.has(t as QType);
+  return (
+    RADIO_TYPES.has(t as QType) ||
+    CHECKBOX_TWO.has(t as QType) ||
+    isListeningMatchingType(t)
+  );
 }
 function isTextType(t: string): boolean {
   return TEXT_TYPES.has(t as QType);
@@ -214,6 +227,13 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
   const [selectedType, setSelectedType] = useState<string>(ALL_TYPES[0]);
   const [draftOpen, setDraftOpen] = useState(false);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [matchingDraft, setMatchingDraft] = useState<MatchingGroupDraft | null>(
+    null,
+  );
+  const [matchingRange, setMatchingRange] = useState<{
+    start: number;
+    end: number;
+  } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [previewMode, setPreviewMode] = useState(false);
@@ -365,6 +385,8 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
   useEffect(() => {
     setDraftOpen(false);
     setDraft(null);
+    setMatchingDraft(null);
+    setMatchingRange(null);
     setEditingId(null);
     setExpanded({});
     setPreviewMode(false);
@@ -524,6 +546,16 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
   }
 
   function openDraft() {
+    if (isListeningMatchingType(selectedType)) {
+      setDraft(null);
+      setDraftOpen(false);
+      setEditingId(null);
+      setMatchingDraft(defaultMatchingGroup(selectedType));
+      setMatchingRange(null);
+      return;
+    }
+    setMatchingDraft(null);
+    setMatchingRange(null);
     setDraft({
       type: selectedType,
       text: "",
@@ -539,6 +571,35 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
   function editQuestion(localId: string) {
     const q = questions.find((x) => x.localId === localId);
     if (!q) return;
+    if (isListeningMatchingType(q.type)) {
+      const idx = questions.findIndex((x) => x.localId === localId);
+      const range = findConsecutiveTypeRange(questions, idx);
+      const groupQs = questions.slice(range.start, range.end + 1);
+      setMatchingDraft(
+        questionsToMatchingGroup(
+          q.type,
+          groupQs.map((item) => ({
+            localId: item.localId,
+            serverId: item.serverId,
+            prompt: item.text,
+            options: (item.options ?? []).map((o) => ({
+              label: o.letter,
+              text: o.text,
+              correct: o.correct,
+            })),
+            difficulty: item.difficulty,
+          })),
+        ),
+      );
+      setMatchingRange(range);
+      setDraft(null);
+      setDraftOpen(false);
+      setSelectedType(q.type);
+      setEditingId(null);
+      return;
+    }
+    setMatchingDraft(null);
+    setMatchingRange(null);
     setDraft({
       type: q.type,
       text: q.text,
@@ -559,6 +620,45 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
     setDraft(null);
     setEditingId(null);
     setDraftOpen(false);
+    setMatchingDraft(null);
+    setMatchingRange(null);
+  }
+
+  function saveMatchingGroup() {
+    if (!matchingDraft) return;
+    const err = matchingGroupError(matchingDraft);
+    if (err) {
+      setError(err);
+      return;
+    }
+    const built = matchingGroupToQuestions(matchingDraft);
+    const records: LocalQuestion[] = built.map((q) => ({
+      localId: q.localId,
+      serverId: q.serverId,
+      type: q.type,
+      text: q.prompt,
+      options: q.options.map((o, i) => ({
+        id: `mo-${q.localId}-${i}`,
+        letter: o.label,
+        text: o.text,
+        correct: o.correct,
+      })),
+      answer: "",
+      altAnswers: [],
+      difficulty: q.difficulty,
+    }));
+    setError(null);
+    setQuestions((prev) => {
+      if (matchingRange) {
+        return [
+          ...prev.slice(0, matchingRange.start),
+          ...records,
+          ...prev.slice(matchingRange.end + 1),
+        ];
+      }
+      return [...prev, ...records];
+    });
+    cancelDraft();
   }
 
   function saveDraft() {
@@ -1066,6 +1166,16 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
         </button>
       </div>
 
+      {matchingDraft ? (
+        <AdminMatchingGroupEditor
+          draft={matchingDraft}
+          editing={matchingRange != null}
+          onChange={setMatchingDraft}
+          onSave={saveMatchingGroup}
+          onCancel={cancelDraft}
+        />
+      ) : null}
+
       {draftOpen && draft && (
         <div className="mt-5 rounded-[18px] border-[1.5px] border-cyan/40 bg-cyan-soft/20 p-6">
           <div className="mb-4 flex items-center justify-between">
@@ -1110,7 +1220,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
             className={cn(adminInput, "mt-0 mb-5 resize-y")}
           />
 
-          {isOptionType(draft.type) && (
+          {isOptionType(draft.type) && !isListeningMatchingType(draft.type) && (
             <>
               <div className="mb-2.5 flex items-center justify-between">
                 <span className={adminMutedLabel}>
