@@ -127,7 +127,7 @@ export function parseApiError(body: ApiErrorBody, status: number): string {
     status === 413 ||
     /FUNCTION_PAYLOAD_TOO_LARGE|Request Entity Too Large/i.test(fallback)
   ) {
-    return "This file is too large for the Vercel upload proxy. Use direct R2 upload (presigned PUT).";
+    return "This file is too large for the Vercel upload proxy. Upload audio directly to the Railway API.";
   }
   if (status === 500 && fallback === "Internal Server Error") {
     return (

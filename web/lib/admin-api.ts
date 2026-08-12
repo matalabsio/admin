@@ -46,21 +46,37 @@ async function adminDownload(path: string, fallbackFilename: string): Promise<vo
   URL.revokeObjectURL(url);
 }
 
-async function putFileToSignedUrl(
+async function putFileToRailway(
   uploadUrl: string,
   file: File,
   contentType: string,
+  ticket: string,
 ): Promise<void> {
-  const res = await fetch(uploadUrl, {
-    method: "PUT",
-    body: file,
-    headers: { "Content-Type": contentType },
-  });
-  if (!res.ok) {
+  let res: Response;
+  try {
+    res = await fetch(uploadUrl, {
+      method: "PUT",
+      body: file,
+      headers: {
+        "Content-Type": contentType,
+        "X-Upload-Ticket": ticket,
+      },
+    });
+  } catch {
     throw new ApiError(
-      `Direct R2 upload failed (${res.status}). Check R2 CORS for this admin origin.`,
-      res.status,
+      "Could not reach the API to upload audio. Confirm Railway CORS allows this admin origin.",
+      0,
     );
+  }
+  if (!res.ok) {
+    let message = `Audio upload failed (${res.status}).`;
+    try {
+      const body = await parseJsonResponse<ApiErrorBody>(res);
+      message = parseApiError(body, res.status);
+    } catch {
+      /* keep status message */
+    }
+    throw new ApiError(message, res.status);
   }
 }
 
@@ -1008,6 +1024,7 @@ export const adminApi = {
       ok: boolean;
       audio_key: string;
       upload_url: string;
+      ticket: string;
       content_type: string;
     }>(`/mocks/${mockId}/ingest/audio-upload-url?part=${part}`, {
       method: "POST",
@@ -1016,10 +1033,14 @@ export const adminApi = {
         content_type: file.type || "audio/mpeg",
       }),
     });
-    await putFileToSignedUrl(
+    if (!session.ticket || !session.upload_url) {
+      throw new ApiError("Upload session is missing a Railway ticket. Redeploy the API.", 500);
+    }
+    await putFileToRailway(
       session.upload_url,
       file,
       session.content_type || "audio/mpeg",
+      session.ticket,
     );
     return { ok: true as const, audio_key: session.audio_key };
   },
@@ -1596,6 +1617,7 @@ export const adminApi = {
       ok: boolean;
       audio_key: string;
       upload_url: string;
+      ticket: string;
       content_type: string;
       part: number;
     }>(`/question-bank/sets/${setId}/listening/${part}/audio-upload-url`, {
@@ -1605,10 +1627,14 @@ export const adminApi = {
         content_type: file.type || "audio/mpeg",
       }),
     });
-    await putFileToSignedUrl(
+    if (!session.ticket || !session.upload_url) {
+      throw new ApiError("Upload session is missing a Railway ticket. Redeploy the API.", 500);
+    }
+    await putFileToRailway(
       session.upload_url,
       file,
       session.content_type || "audio/mpeg",
+      session.ticket,
     );
     return {
       ok: true as const,
