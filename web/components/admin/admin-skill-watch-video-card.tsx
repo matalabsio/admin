@@ -53,9 +53,11 @@ export function AdminSkillWatchVideoCard({
   const [title, setTitle] = useState(defaultTitle);
   const [durationMin, setDurationMin] = useState("12");
   const [file, setFile] = useState<File | null>(null);
+  const [uidInput, setUidInput] = useState("");
   const [existing, setExisting] = useState<StreamVideoItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [attaching, setAttaching] = useState(false);
   const [phase, setPhase] = useState<"idle" | "compress" | "upload">("idle");
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +155,39 @@ export function AdminSkillWatchVideoCard({
     }
   }
 
+  async function onAttach() {
+    const uid = uidInput.trim();
+    if (!uid) {
+      setError("Paste a Stream video UID or iframe URL.");
+      return;
+    }
+    setAttaching(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const minutes = Number.parseInt(durationMin, 10);
+      const saved = await adminApi.completeStreamVideo({
+        tag,
+        title: title.trim() || defaultTitle,
+        stream_uid: uid,
+        duration_min: Number.isFinite(minutes) ? Math.max(0, minutes) : 0,
+      });
+      const hubs = saved.hubs_updated ?? 0;
+      setSuccess(
+        hubs > 0
+          ? `Watch video attached. Synced to ${hubs} hub${hubs === 1 ? "" : "s"}.`
+          : "Watch video attached to the Stream library.",
+      );
+      setUidInput("");
+      setExisting(saved);
+      onUploaded?.(saved);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not attach Stream video");
+    } finally {
+      setAttaching(false);
+    }
+  }
+
   const statusLabel = loading
     ? "Checking…"
     : existing?.playback_url
@@ -170,9 +205,8 @@ export function AdminSkillWatchVideoCard({
             Skill video · Cloudflare Stream
           </h2>
           <p className={cn(adminSubtext, "mt-1 max-w-xl")}>
-            One video for this skill’s Watch step. Upload a compressed 720p file
-            (H.264 MP4, ideally under {formatVideoBytes(STREAM_SOFT_MAX_BYTES)}
-            ). Larger files are compressed in-browser before upload.
+            One video for this skill’s Watch step. Prefer attaching a UID from
+            the Cloudflare Stream panel. File upload is optional for small MP4s.
           </p>
         </div>
         <span className="font-mono text-xs text-[#94A3B8]">{statusLabel}</span>
@@ -210,7 +244,7 @@ export function AdminSkillWatchVideoCard({
                 className={adminInput}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                disabled={uploading}
+                disabled={uploading || attaching}
               />
             </label>
             <label className="block text-sm font-semibold text-navy">
@@ -222,20 +256,40 @@ export function AdminSkillWatchVideoCard({
                 max={240}
                 value={durationMin}
                 onChange={(e) => setDurationMin(e.target.value)}
-                disabled={uploading}
+                disabled={uploading || attaching}
               />
             </label>
           </>
         ) : null}
 
+        <label className={cn("block text-sm font-semibold text-navy", !compact && "sm:col-span-2")}>
+          Stream UID or iframe URL
+          <input
+            className={adminInput}
+            value={uidInput}
+            onChange={(e) => setUidInput(e.target.value)}
+            placeholder="Paste UID from Cloudflare Stream"
+            disabled={uploading || attaching}
+          />
+        </label>
         <div className={cn(!compact && "sm:col-span-2")}>
-          <p className="text-sm font-semibold text-navy">Compressed video file</p>
+          <button
+            type="button"
+            className={adminBtnPrimary}
+            disabled={uploading || attaching || !uidInput.trim()}
+            onClick={() => void onAttach()}
+          >
+            {attaching ? "Attaching…" : existing ? "Replace from UID" : "Attach Stream UID"}
+          </button>
+        </div>
+        <div className={cn(!compact && "sm:col-span-2")}>
+          <p className="text-sm font-semibold text-navy">Or upload a compressed file</p>
           <input
             ref={inputRef}
             type="file"
             accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
             className="hidden"
-            disabled={uploading}
+            disabled={uploading || attaching}
             onChange={(e) => {
               setFile(e.target.files?.[0] ?? null);
               setError(null);
@@ -246,7 +300,7 @@ export function AdminSkillWatchVideoCard({
             <button
               type="button"
               className={adminBtnSecondary}
-              disabled={uploading}
+              disabled={uploading || attaching}
               onClick={() => inputRef.current?.click()}
             >
               <Video className="size-3.5" aria-hidden />
@@ -255,7 +309,7 @@ export function AdminSkillWatchVideoCard({
             <button
               type="button"
               className={adminBtnPrimary}
-              disabled={uploading || !file}
+              disabled={uploading || attaching || !file}
               onClick={() => void onUpload()}
             >
               <Upload className="size-3.5" aria-hidden />

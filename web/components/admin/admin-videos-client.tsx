@@ -19,6 +19,7 @@ import {
 } from "@/components/admin/admin-ui";
 import {
   adminApi,
+  type StreamLibraryItem,
   type StreamVideoItem,
   type StreamVideoTag,
 } from "@/lib/admin-api";
@@ -81,14 +82,21 @@ export function AdminVideosClient() {
   const initialTag = isStreamTag(tagFromQuery) ? tagFromQuery : "listening-intro";
 
   const [items, setItems] = useState<StreamVideoItem[]>([]);
+  const [library, setLibrary] = useState<StreamLibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [tag, setTag] = useState<StreamVideoTag>(initialTag);
   const [title, setTitle] = useState(DEFAULT_TITLES[initialTag]);
   const [durationMin, setDurationMin] = useState("12");
+  const [uidInput, setUidInput] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [attaching, setAttaching] = useState(false);
+  const [importingUid, setImportingUid] = useState<string | null>(null);
+  const [importTagByUid, setImportTagByUid] = useState<Record<string, StreamVideoTag>>(
+    {},
+  );
   const [phase, setPhase] = useState<"idle" | "compress" | "upload">("idle");
   const [progress, setProgress] = useState<number | null>(null);
 
@@ -96,8 +104,12 @@ export function AdminVideosClient() {
     setLoading(true);
     setError(null);
     try {
-      const res = await adminApi.listStreamVideos();
-      setItems(res.items);
+      const [saved, remote] = await Promise.all([
+        adminApi.listStreamVideos(),
+        adminApi.listStreamLibrary().catch(() => ({ items: [] as StreamLibraryItem[] })),
+      ]);
+      setItems(saved.items);
+      setLibrary(remote.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load Stream videos");
     } finally {
@@ -198,11 +210,61 @@ export function AdminVideosClient() {
     }
   }
 
+  async function attachExisting(streamUid: string, attachTag: StreamVideoTag, attachTitle?: string) {
+    const uid = streamUid.trim();
+    if (!uid) {
+      setError("Paste a Stream video UID or iframe URL.");
+      return;
+    }
+    const minutes = Number.parseInt(durationMin, 10);
+    const saved = await adminApi.completeStreamVideo({
+      tag: attachTag,
+      title: (attachTitle || title).trim() || DEFAULT_TITLES[attachTag],
+      stream_uid: uid,
+      duration_min: Number.isFinite(minutes) ? Math.max(0, minutes) : 0,
+    });
+    const hubs = saved.hubs_updated ?? 0;
+    setSuccess(
+      hubs > 0
+        ? `Attached ${saved.tag}. Replaced Watch on ${hubs} hub${hubs === 1 ? "" : "s"}.`
+        : `Attached ${saved.tag} to the Stream library.`,
+    );
+    setUidInput("");
+    await load();
+  }
+
+  async function onAttach() {
+    setAttaching(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await attachExisting(uidInput, tag);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not attach Stream video");
+    } finally {
+      setAttaching(false);
+    }
+  }
+
+  async function onImport(item: StreamLibraryItem) {
+    const nextTag = importTagByUid[item.uid] || tag;
+    setImportingUid(item.uid);
+    setError(null);
+    setSuccess(null);
+    try {
+      await attachExisting(item.uid, nextTag, item.name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not import Stream video");
+    } finally {
+      setImportingUid(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <AdminPageHeader
         title="Videos"
-        subtitle="Upload compressed explainers to Cloudflare Stream. Skill tags set exactly one Watch video for every hub in that section."
+        subtitle="Upload in the Cloudflare Stream panel, then attach the UID here. Skill tags set exactly one Watch video for every hub in that section."
         actions={
           <button
             type="button"
@@ -226,6 +288,142 @@ export function AdminVideosClient() {
           {success}
         </p>
       ) : null}
+
+      <section className={adminCard}>
+        <p className={adminMutedLabel}>Attach existing Stream video</p>
+        <p className={cn(adminSubtext, "mt-1")}>
+          Paste a Stream UID or iframe URL. No re-upload and no browser compress.
+        </p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm font-semibold text-navy">
+            Placement tag
+            <select
+              className={adminInput}
+              value={tag}
+              onChange={(e) => onTagChange(e.target.value as StreamVideoTag)}
+              disabled={attaching || uploading}
+            >
+              {TAG_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label} — {opt.hint}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-sm font-semibold text-navy">
+            Title
+            <input
+              className={adminInput}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={attaching || uploading}
+            />
+          </label>
+          <label className="block text-sm font-semibold text-navy sm:col-span-2">
+            Stream UID or iframe URL
+            <input
+              className={adminInput}
+              value={uidInput}
+              onChange={(e) => setUidInput(e.target.value)}
+              placeholder="479d46fb… or https://customer-….cloudflarestream.com/…/iframe"
+              disabled={attaching || uploading}
+            />
+          </label>
+        </div>
+        <div className="mt-5">
+          <button
+            type="button"
+            className={adminBtnPrimary}
+            onClick={() => void onAttach()}
+            disabled={attaching || uploading || !uidInput.trim()}
+          >
+            {attaching ? "Attaching…" : "Attach to BandForge"}
+          </button>
+        </div>
+      </section>
+
+      <section className={adminTable}>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div>
+            <p className={adminMutedLabel}>Cloudflare Stream library</p>
+            <p className={cn(adminSubtext, "mt-1")}>
+              Videos in this Stream account. Assign a tag to import — untagged files stay in Cloudflare only.
+            </p>
+          </div>
+        </div>
+        <table className="min-w-full text-left text-sm">
+          <thead className={adminTableHead}>
+            <tr>
+              <th className="px-4 py-3">Name</th>
+              <th className="px-4 py-3">UID</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Assigned</th>
+              <th className="px-4 py-3">Import</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && library.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-[#94A3B8]">
+                  Loading Cloudflare library…
+                </td>
+              </tr>
+            ) : library.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-[#94A3B8]">
+                  No videos in Cloudflare Stream, or Stream credentials are missing on Railway.
+                </td>
+              </tr>
+            ) : (
+              library.map((item) => (
+                <tr key={item.uid} className="border-t border-[#EDF1F6]">
+                  <td className="px-4 py-3 font-semibold text-navy">{item.name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-[#5A6B82]">
+                    {item.uid.slice(0, 12)}…
+                  </td>
+                  <td className="px-4 py-3 text-[#5A6B82]">{item.status}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-navy">
+                    {item.assigned_tag || "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        className={cn(adminInput, "mt-0 min-w-[10rem] py-1.5 text-xs")}
+                        value={importTagByUid[item.uid] || tag}
+                        onChange={(e) =>
+                          setImportTagByUid((prev) => ({
+                            ...prev,
+                            [item.uid]: e.target.value as StreamVideoTag,
+                          }))
+                        }
+                        disabled={importingUid === item.uid}
+                      >
+                        {TAG_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className={adminBtnSecondary}
+                        disabled={importingUid != null}
+                        onClick={() => void onImport(item)}
+                      >
+                        {importingUid === item.uid
+                          ? "Importing…"
+                          : item.assigned_tag
+                            ? "Reassign"
+                            : "Import"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </section>
 
       {SKILL_TAGS.has(tag) ? (
         <AdminSkillWatchVideoCard
@@ -380,7 +578,7 @@ export function AdminVideosClient() {
             ) : items.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-[#94A3B8]">
-                  No Stream videos yet. Upload a compressed file with a placement tag.
+                  No BandForge tags yet. Attach a Stream UID or import from the Cloudflare library.
                 </td>
               </tr>
             ) : (

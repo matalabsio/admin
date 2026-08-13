@@ -13,7 +13,12 @@ from app.admin.stream_videos import (
     videos_for_skill,
 )
 from app.practice.schemas import PracticeVideo
-from app.storage.stream import StreamError, normalize_customer_code, playback_iframe_url
+from app.storage.stream import (
+    StreamError,
+    normalize_customer_code,
+    parse_stream_uid,
+    playback_iframe_url,
+)
 
 
 def test_normalize_customer_code_strips_domain():
@@ -26,6 +31,22 @@ def test_normalize_customer_code_strips_domain():
         normalize_customer_code("https://customer-abc.cloudflarestream.com/")
         == "customer-abc"
     )
+
+
+def test_parse_stream_uid_accepts_raw_and_urls():
+    uid = "479d46fb3847e47b3a569d6a9ae05586"
+    assert parse_stream_uid(uid) == uid
+    assert (
+        parse_stream_uid(
+            f"https://customer-v3lxo54ja5bjxf7e.cloudflarestream.com/{uid}/iframe"
+        )
+        == uid
+    )
+    assert parse_stream_uid(f"https://watch.cloudflarestream.com/{uid}") == uid
+    with pytest.raises(StreamError):
+        parse_stream_uid("")
+    with pytest.raises(StreamError):
+        parse_stream_uid("https://example.com/video.mp4")
 
 
 def test_playback_iframe_url():
@@ -112,6 +133,43 @@ def test_practice_video_accepts_stream_fields():
     assert video.tag == "reading-intro"
     legacy = PracticeVideo(title="Old", url="", duration_min=8)
     assert legacy.tag is None
+
+
+def test_list_stream_library_merges_assigned_tag():
+    from app.admin import stream_videos as sv
+
+    remote = [
+        {
+            "uid": "aaa111aaa111aaa111aaa111aaa111aa",
+            "meta": {"name": "listening-intro-720p.mp4"},
+            "duration": 361,
+            "status": {"state": "ready"},
+            "thumbnail": "https://example.com/a.jpg",
+            "requireSignedURLs": True,
+            "created": "2026-08-12T00:00:00Z",
+        },
+        {
+            "uid": "bbb222bbb222bbb222bbb222bbb222bb",
+            "meta": {"name": "IELTS intro"},
+            "duration": 324,
+            "status": {"state": "ready"},
+            "requireSignedURLs": False,
+        },
+    ]
+    with (
+        patch.object(sv, "list_account_videos", return_value=remote),
+        patch.object(
+            sv,
+            "list_stream_videos",
+            return_value=[{"stream_uid": "bbb222bbb222bbb222bbb222bbb222bb", "tag": "ielts-intro"}],
+        ),
+    ):
+        out = sv.list_stream_library()
+    assert len(out) == 2
+    by_uid = {row["uid"]: row for row in out}
+    assert by_uid["aaa111aaa111aaa111aaa111aaa111aa"]["assigned_tag"] is None
+    assert by_uid["aaa111aaa111aaa111aaa111aaa111aa"]["name"] == "listening-intro-720p.mp4"
+    assert by_uid["bbb222bbb222bbb222bbb222bbb222bb"]["assigned_tag"] == "ielts-intro"
 
 
 def test_create_direct_upload_maps_quota_error():

@@ -897,6 +897,17 @@ export type StreamDirectUploadResponse = {
   uploadURL: string;
 };
 
+export type StreamLibraryItem = {
+  uid: string;
+  name: string;
+  duration_sec: number;
+  status: string;
+  thumbnail: string;
+  require_signed_urls: boolean;
+  assigned_tag: string | null;
+  created?: string | null;
+};
+
 export const adminApi = {
   metrics() {
     return adminCall<DashboardMetrics>("/dashboard/metrics");
@@ -1786,6 +1797,10 @@ export const adminApi = {
 
   listStreamVideos() {
     return adminCall<{ items: StreamVideoItem[] }>("/stream/videos");
+  },
+
+  listStreamLibrary() {
+    return adminCall<{ items: StreamLibraryItem[] }>("/stream/library");
   },
 
   createStreamDirectUpload(body: {
