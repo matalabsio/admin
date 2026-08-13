@@ -11,6 +11,7 @@ import {
 } from "@/components/admin/admin-builder-source";
 import { AdminBuilderStickyBar } from "@/components/admin/admin-builder-sticky-bar";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { AdminSetWatchVideoCard } from "@/components/admin/admin-set-watch-video-card";
 import {
   adminBtnPrimary,
   adminBtnSecondary,
@@ -292,6 +293,10 @@ export function AdminWritingBuilderClient({
           </Link>
         }
       />
+
+      {source.kind === "bank" ? (
+        <AdminSetWatchVideoCard setId={source.setId} className="mt-5" />
+      ) : null}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         {maxTasks > 1 ? (

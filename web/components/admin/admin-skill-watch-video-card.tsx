@@ -1,19 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Upload, Video } from "lucide-react";
-import { Upload as TusUpload } from "tus-js-client";
+import { Loader2, Upload, Video } from "lucide-react";
 import {
   adminApi,
   type StreamVideoItem,
   type StreamVideoTag,
 } from "@/lib/admin-api";
+import { streamStatusKind, waitForStreamReady } from "@/lib/stream-ready";
 import {
   STREAM_DIRECT_MAX_BYTES,
-  STREAM_TUS_CHUNK_BYTES,
   formatVideoBytes,
   prepareVideoForStreamUpload,
+  uploadFileToStreamTus,
 } from "@/lib/stream-video-upload";
+import { AdminStreamUploadStatus } from "@/components/admin/admin-stream-status";
 import {
   adminBtnPrimary,
   adminBtnSecondary,
@@ -59,6 +60,9 @@ export function AdminSkillWatchVideoCard({
   const [uploading, setUploading] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
+  const [uploadPhase, setUploadPhase] = useState<"uploading" | "processing">(
+    "uploading",
+  );
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,6 +92,7 @@ export function AdminSkillWatchVideoCard({
       return;
     }
     setUploading(true);
+    setUploadPhase("uploading");
     setError(null);
     setSuccess(null);
     setProgress(0);
@@ -100,25 +105,18 @@ export function AdminSkillWatchVideoCard({
         max_duration_seconds: 3600,
         upload_length: prepared.file.size,
       });
-      await new Promise<void>((resolve, reject) => {
-        const upload = new TusUpload(prepared.file, {
-          endpoint: created.uploadURL,
-          chunkSize: STREAM_TUS_CHUNK_BYTES,
-          retryDelays: [0, 3000, 5000, 10000, 20000],
-          metadata: {
-            filename: prepared.file.name,
-            filetype: prepared.file.type || "video/mp4",
-          },
-          onError: (err) => reject(err),
-          onProgress: (bytesUploaded, bytesTotal) => {
-            if (bytesTotal > 0) {
-              setProgress(Math.round((bytesUploaded / bytesTotal) * 100));
-            }
-          },
-          onSuccess: () => resolve(),
-        });
-        upload.start();
+      await uploadFileToStreamTus(prepared.file, created.uploadURL, setProgress);
+      setProgress(100);
+      setUploadPhase("processing");
+      setExisting({
+        tag,
+        title: title.trim() || defaultTitle,
+        stream_uid: created.uid,
+        playback_url: "",
+        duration_min: 0,
+        status: "processing",
       });
+      await waitForStreamReady(created.uid, { minMs: 1200, intervalMs: 2000 });
       const minutes = Number.parseInt(durationMin, 10);
       const saved = await adminApi.completeStreamVideo({
         tag,
@@ -130,19 +128,22 @@ export function AdminSkillWatchVideoCard({
       const shrinkNote = prepared.compressed
         ? ` Compressed ${formatVideoBytes(prepared.originalBytes)} → ${formatVideoBytes(prepared.finalBytes)}.`
         : "";
+      const ready = streamStatusKind(saved.status) === "ready";
       setSuccess(
         hubs > 0
-          ? `Watch video saved.${shrinkNote} Synced to ${hubs} hub${hubs === 1 ? "" : "s"}.`
-          : `Watch video saved to Stream library.${shrinkNote}`,
+          ? `Watch video saved${ready ? "" : " · processing on Stream"}.${shrinkNote} Synced to ${hubs} hub${hubs === 1 ? "" : "s"}.`
+          : `Watch video saved to Stream library${ready ? "" : " · processing on Stream"}.${shrinkNote}`,
       );
       setFile(null);
       if (inputRef.current) inputRef.current.value = "";
-      setProgress(100);
+      setProgress(null);
+      setUploadPhase("uploading");
       setExisting(saved);
       onUploaded?.(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
       setProgress(null);
+      setUploadPhase("uploading");
     } finally {
       setUploading(false);
     }
@@ -181,12 +182,15 @@ export function AdminSkillWatchVideoCard({
     }
   }
 
+  const statusKind = streamStatusKind(existing?.status);
   const statusLabel = loading
     ? "Checking…"
-    : existing?.playback_url
-      ? existing.status === "ready"
+    : existing?.playback_url || existing?.stream_uid
+      ? statusKind === "ready"
         ? "Stream ready"
-        : existing.status || "On Stream"
+        : statusKind === "error"
+          ? "Stream error"
+          : "Processing on Stream"
       : "Not uploaded";
 
   return (
@@ -202,7 +206,12 @@ export function AdminSkillWatchVideoCard({
             the Cloudflare Stream panel. File upload is optional for small MP4s.
           </p>
         </div>
-        <span className="font-mono text-xs text-[#94A3B8]">{statusLabel}</span>
+        <span className="inline-flex items-center gap-1.5 font-mono text-xs text-[#5A6B82]">
+          {statusKind === "processing" || (uploading && uploadPhase === "processing") ? (
+            <Loader2 className="size-3.5 motion-safe:animate-spin text-teal" aria-hidden />
+          ) : null}
+          {uploading && uploadPhase === "processing" ? "Processing on Stream" : statusLabel}
+        </span>
       </div>
 
       {error ? (
@@ -307,7 +316,9 @@ export function AdminSkillWatchVideoCard({
             >
               <Upload className="size-3.5" aria-hidden />
               {uploading
-                ? "Uploading to Stream…"
+                ? uploadPhase === "processing"
+                  ? "Processing on Stream…"
+                  : "Uploading to Stream…"
                 : existing
                   ? "Replace on Stream"
                   : "Upload to Stream"}
@@ -329,19 +340,17 @@ export function AdminSkillWatchVideoCard({
         </div>
       </div>
 
-      {progress != null ? (
-        <div className="mt-4">
-          <div className="h-2 overflow-hidden rounded-full bg-[#EEF2F6]">
-            <div
-              className="h-full rounded-full bg-cyan transition-[width]"
-              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-            />
-          </div>
-          <p className={cn(adminMeta, "mt-1")}>
-            Uploading · {progress}%
-          </p>
-        </div>
-      ) : null}
+      <AdminStreamUploadStatus
+        phase={
+          uploading
+            ? uploadPhase === "processing"
+              ? "processing"
+              : "uploading"
+            : "idle"
+        }
+        progress={uploading ? (progress ?? 0) : 0}
+        fileName={file?.name}
+      />
     </section>
   );
 }

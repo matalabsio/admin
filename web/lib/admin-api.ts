@@ -874,6 +874,7 @@ export type SpeakingPartResponse = {
 export type StreamVideoTag =
   | "bandforge-intro"
   | "ielts-intro"
+  | "hero-intro"
   | "listening-intro"
   | "reading-intro"
   | "writing-intro"
@@ -1824,6 +1825,17 @@ export const adminApi = {
     return adminCall<StreamVideoItem>("/stream/videos/complete", {
       method: "POST",
       body: JSON.stringify(body),
+    });
+  },
+
+  deleteStreamLibraryVideo(uid: string) {
+    return adminCall<{
+      ok: boolean;
+      uid: string;
+      unassigned_tag: string | null;
+      hubs_updated: number;
+    }>(`/stream/library/${encodeURIComponent(uid)}`, {
+      method: "DELETE",
     });
   },
 };

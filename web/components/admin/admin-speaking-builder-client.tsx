@@ -20,6 +20,7 @@ import {
   builderPartHref,
 } from "@/components/admin/admin-builder-source";
 import { AdminBuilderStickyBar } from "@/components/admin/admin-builder-sticky-bar";
+import { AdminSetWatchVideoCard } from "@/components/admin/admin-set-watch-video-card";
 import {
   adminBtnPrimary,
   adminBtnSecondary,
@@ -274,12 +275,13 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
     });
   };
 
-  const canSave = questions.every((q) => {
-    if (!q.prompt.trim()) return false;
-    if (safePart === 2 && !q.video_url?.trim()) return false;
-    if (q.min_skip_sec > q.speak_time_sec) return false;
-    return true;
-  });
+  const canSave =
+    questions.length > 0 &&
+    questions.every((q) => {
+      if (safePart === 2 && !q.video_url?.trim()) return false;
+      if (q.min_skip_sec > q.speak_time_sec) return false;
+      return true;
+    });
 
   const handleSave = async () => {
     setSaving(true);
@@ -430,6 +432,10 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
             );
           })}
         </div>
+      ) : null}
+
+      {isBank ? (
+        <AdminSetWatchVideoCard setId={source.setId} className="mb-5" />
       ) : null}
 
       {error ? (
@@ -627,7 +633,7 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
                       <>
                         <label className="mb-3 block">
                           <span className={cn(adminMutedLabel, "mb-2 block")}>
-                            Cue card (bullet points shown on screen)
+                            Cue card (optional — leave empty if the video is enough)
                           </span>
                           <textarea
                             rows={4}
@@ -670,11 +676,11 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
                     ) : (
                       <label className="block">
                         <span className={cn(adminMutedLabel, "mb-2 block")}>
-                          Question prompt
+                          Question prompt (optional)
                         </span>
                         <textarea
                           rows={2}
-                          placeholder="Enter the examiner question…"
+                          placeholder="Optional — leave empty to use the video only"
                           className={cn(
                             adminInput,
                             "mt-0 min-h-[72px] resize-y rounded-[9px] px-[13px] py-[11px] text-[13.5px] leading-[1.55]",

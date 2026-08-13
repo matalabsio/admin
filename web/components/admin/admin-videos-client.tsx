@@ -1,10 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Check, ExternalLink, RefreshCw, Upload } from "lucide-react";
-import { Upload as TusUpload } from "tus-js-client";
+import { Check, ExternalLink, Loader2, RefreshCw, Trash2, Upload } from "lucide-react";
+import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import {
+  AdminStreamStatusBadge,
+  AdminStreamUploadStatus,
+} from "@/components/admin/admin-stream-status";
 import {
   adminBtnPrimary,
   adminBtnSecondary,
@@ -12,7 +16,6 @@ import {
   adminInput,
   adminMeta,
   adminMutedLabel,
-  adminStatusBadgeStyles,
   adminSubtext,
   adminTable,
   adminTableHead,
@@ -24,23 +27,31 @@ import {
   type StreamVideoTag,
 } from "@/lib/admin-api";
 import {
+  liveStreamStatus,
+  streamStatusKind,
+  upsertStreamItem,
+  waitForStreamReady,
+} from "@/lib/stream-ready";
+import {
   STREAM_DIRECT_MAX_BYTES,
-  STREAM_TUS_CHUNK_BYTES,
   formatVideoBytes,
   prepareVideoForStreamUpload,
+  uploadFileToStreamTus,
 } from "@/lib/stream-video-upload";
 import { cn } from "@/lib/utils";
 
 const TAG_OPTIONS: { value: StreamVideoTag; label: string; hint: string }[] = [
+  { value: "hero-intro", label: "Hero", hint: "Landing talking head" },
   { value: "listening-intro", label: "Listening", hint: "Watch on all Listening practice" },
   { value: "reading-intro", label: "Reading", hint: "Watch on all Reading practice" },
   { value: "writing-intro", label: "Writing", hint: "Watch on all Writing practice" },
   { value: "speaking-intro", label: "Speaking", hint: "Watch on all Speaking practice" },
-  { value: "ielts-intro", label: "IELTS intro", hint: "Landing / library only" },
+  { value: "ielts-intro", label: "IELTS intro", hint: "Library only" },
   { value: "bandforge-intro", label: "BandForge intro", hint: "Library only" },
 ];
 
 const DEFAULT_TITLES: Record<StreamVideoTag, string> = {
+  "hero-intro": "Talking head",
   "bandforge-intro": "BandForge intro",
   "ielts-intro": "IELTS intro",
   "listening-intro": "Listening intro",
@@ -67,7 +78,7 @@ function formatDuration(item: StreamVideoItem | undefined, library?: StreamLibra
 export function AdminVideosClient() {
   const searchParams = useSearchParams();
   const tagFromQuery = searchParams.get("tag");
-  const initialTag = isStreamTag(tagFromQuery) ? tagFromQuery : "listening-intro";
+  const initialTag = isStreamTag(tagFromQuery) ? tagFromQuery : "hero-intro";
   const formId = useId();
 
   const [items, setItems] = useState<StreamVideoItem[]>([]);
@@ -82,16 +93,37 @@ export function AdminVideosClient() {
   const [attaching, setAttaching] = useState(false);
   const [importingUid, setImportingUid] = useState<string | null>(null);
   const [importTagByUid, setImportTagByUid] = useState<Record<string, StreamVideoTag>>({});
+  const [pendingDelete, setPendingDelete] = useState<StreamLibraryItem | null>(null);
+  const [deletingUid, setDeletingUid] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
+  const [uploadPhase, setUploadPhase] = useState<"uploading" | "processing">(
+    "uploading",
+  );
+  const [busyTag, setBusyTag] = useState<StreamVideoTag | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const persistedReadyRef = useRef<Set<string>>(new Set());
 
   const assignedCount = TAG_OPTIONS.filter((opt) =>
     items.some((item) => item.tag === opt.value && item.stream_uid),
   ).length;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const processingUids = useMemo(() => {
+    return items
+      .filter((item) => {
+        const remote = library.find((row) => row.uid === item.stream_uid);
+        return (
+          streamStatusKind(liveStreamStatus(item.status, remote?.status)) ===
+          "processing"
+        );
+      })
+      .map((item) => item.stream_uid)
+      .sort()
+      .join("|");
+  }, [items, library]);
+
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
+    if (!opts?.silent) setError(null);
     try {
       const [saved, remote] = await Promise.all([
         adminApi.listStreamVideos(),
@@ -99,16 +131,58 @@ export function AdminVideosClient() {
       ]);
       setItems(saved.items);
       setLibrary(remote.items);
+      return { items: saved.items, library: remote.items };
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load videos");
+      if (!opts?.silent) {
+        setError(err instanceof Error ? err.message : "Could not load videos");
+      }
+      return null;
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!processingUids || uploading) return;
+    let cancelled = false;
+    const persistReady = async () => {
+      const result = await load({ silent: true });
+      if (cancelled || !result) return;
+      for (const item of result.items) {
+        const remote = result.library.find((row) => row.uid === item.stream_uid);
+        if (
+          streamStatusKind(item.status) !== "ready" &&
+          streamStatusKind(remote?.status) === "ready" &&
+          TAG_OPTIONS.some((opt) => opt.value === item.tag) &&
+          !persistedReadyRef.current.has(item.stream_uid)
+        ) {
+          persistedReadyRef.current.add(item.stream_uid);
+          try {
+            const saved = await adminApi.completeStreamVideo({
+              tag: item.tag as StreamVideoTag,
+              title: item.title || DEFAULT_TITLES[item.tag as StreamVideoTag],
+              stream_uid: item.stream_uid,
+              duration_min: item.duration_min,
+            });
+            if (cancelled) return;
+            setItems((prev) => upsertStreamItem(prev, saved));
+          } catch {
+            persistedReadyRef.current.delete(item.stream_uid);
+          }
+        }
+      }
+    };
+    const id = window.setInterval(() => void persistReady(), 2000);
+    void persistReady();
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [load, processingUids, uploading]);
 
   useEffect(() => {
     if (isStreamTag(tagFromQuery) && tagFromQuery !== tag) {
@@ -133,18 +207,22 @@ export function AdminVideosClient() {
       stream_uid: uid,
       duration_min: 0,
     });
+    setItems((prev) => upsertStreamItem(prev, saved));
     const hubs = saved.hubs_updated ?? 0;
+    const ready = streamStatusKind(saved.status) === "ready";
     setSuccess(
       hubs > 0
-        ? `${DEFAULT_TITLES[attachTag]} is assigned. Watch updated on ${hubs} hub${hubs === 1 ? "" : "s"}.`
-        : `${DEFAULT_TITLES[attachTag]} is assigned.`,
+        ? `${DEFAULT_TITLES[attachTag]} is assigned${ready ? "" : " · processing on Stream"}. Watch updated on ${hubs} hub${hubs === 1 ? "" : "s"}.`
+        : `${DEFAULT_TITLES[attachTag]} is assigned${ready ? "" : " · processing on Stream"}.`,
     );
     setUidInput("");
-    await load();
+    await load({ silent: true });
+    return saved;
   }
 
   async function onAttach() {
     setAttaching(true);
+    setBusyTag(tag);
     setError(null);
     setSuccess(null);
     try {
@@ -153,20 +231,59 @@ export function AdminVideosClient() {
       setError(err instanceof Error ? err.message : "Could not attach Stream video");
     } finally {
       setAttaching(false);
+      setBusyTag(null);
+    }
+  }
+
+  async function onDelete() {
+    const item = pendingDelete;
+    if (!item) return;
+    setDeletingUid(item.uid);
+    setError(null);
+    setSuccess(null);
+    try {
+      const saved = await adminApi.deleteStreamLibraryVideo(item.uid);
+      const hubs = saved.hubs_updated ?? 0;
+      setSuccess(
+        hubs > 0
+          ? `Deleted “${item.name}” from Stream. Watch cleared on ${hubs} hub${hubs === 1 ? "" : "s"}.`
+          : `Deleted “${item.name}” from Stream.`,
+      );
+      setPendingDelete(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete Stream video");
+    } finally {
+      setDeletingUid(null);
     }
   }
 
   async function onImport(item: StreamLibraryItem) {
     const nextTag = importTagByUid[item.uid] || tag;
     setImportingUid(item.uid);
+    setBusyTag(nextTag);
     setError(null);
     setSuccess(null);
     try {
-      await attachExisting(item.uid, nextTag, item.name);
+      const saved = await attachExisting(item.uid, nextTag, item.name);
+      setLibrary((prev) =>
+        prev.map((row) =>
+          row.uid === item.uid
+            ? {
+                ...row,
+                assigned_tag: nextTag,
+                status: saved?.status || row.status,
+              }
+            : row.assigned_tag === nextTag && row.uid !== item.uid
+              ? { ...row, assigned_tag: null }
+              : row,
+        ),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not assign Stream video");
     } finally {
       setImportingUid(null);
+      setBusyTag(null);
     }
   }
 
@@ -176,6 +293,8 @@ export function AdminVideosClient() {
       return;
     }
     setUploading(true);
+    setBusyTag(tag);
+    setUploadPhase("uploading");
     setError(null);
     setSuccess(null);
     setProgress(0);
@@ -188,37 +307,35 @@ export function AdminVideosClient() {
         max_duration_seconds: 3600,
         upload_length: prepared.file.size,
       });
-      await new Promise<void>((resolve, reject) => {
-        const upload = new TusUpload(prepared.file, {
-          endpoint: created.uploadURL,
-          chunkSize: STREAM_TUS_CHUNK_BYTES,
-          retryDelays: [0, 3000, 5000, 10000, 20000],
-          metadata: {
-            filename: prepared.file.name,
-            filetype: prepared.file.type || "video/mp4",
-          },
-          onError: (err) => reject(err),
-          onProgress: (bytesUploaded, bytesTotal) => {
-            if (bytesTotal > 0) {
-              setProgress(Math.round((bytesUploaded / bytesTotal) * 100));
-            }
-          },
-          onSuccess: () => resolve(),
-        });
-        upload.start();
-      });
+      await uploadFileToStreamTus(prepared.file, created.uploadURL, setProgress);
+      setProgress(100);
+      setUploadPhase("processing");
+      setItems((prev) =>
+        upsertStreamItem(prev, {
+          tag,
+          title: DEFAULT_TITLES[tag],
+          stream_uid: created.uid,
+          playback_url: "",
+          duration_min: 0,
+          status: "processing",
+        }),
+      );
+      await waitForStreamReady(created.uid, { minMs: 1200, intervalMs: 2000 });
       await attachExisting(created.uid, tag, DEFAULT_TITLES[tag]);
       setFile(null);
-      setProgress(100);
+      setProgress(null);
+      setUploadPhase("uploading");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
       setProgress(null);
+      setUploadPhase("uploading");
     } finally {
       setUploading(false);
+      setBusyTag(null);
     }
   }
 
-  const busy = loading || attaching || uploading || importingUid != null;
+  const busy = loading || attaching || uploading || importingUid != null || deletingUid != null;
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -276,7 +393,11 @@ export function AdminVideosClient() {
             </label>
             <select
               id={`${formId}-upload-tag`}
-              className={adminInput}
+              className={cn(
+                adminInput,
+                "cursor-pointer border-cyan bg-cyan-soft font-semibold text-navy shadow-[0_0_0_3px_rgba(0,188,212,0.14)]",
+                "hover:border-teal hover:bg-[#D9F4F8] focus:border-teal focus:ring-cyan/30",
+              )}
               value={tag}
               onChange={(e) => setTag(e.target.value as StreamVideoTag)}
               disabled={uploading || attaching}
@@ -342,8 +463,16 @@ export function AdminVideosClient() {
             onClick={() => void onUpload()}
             disabled={uploading || attaching || !file}
           >
-            <Upload className="mr-1.5 size-3.5" aria-hidden />
-            {uploading ? "Uploading…" : "Upload"}
+            {uploading ? (
+              <Loader2 className="mr-1.5 size-3.5 motion-safe:animate-spin" aria-hidden />
+            ) : (
+              <Upload className="mr-1.5 size-3.5" aria-hidden />
+            )}
+            {uploading
+              ? uploadPhase === "processing"
+                ? "Processing…"
+                : "Uploading…"
+              : "Upload"}
           </button>
           {file ? (
             <button
@@ -356,26 +485,17 @@ export function AdminVideosClient() {
             </button>
           ) : null}
         </div>
-        {progress != null ? (
-          <div
-            className="mt-4 max-w-md"
-            role="progressbar"
-            aria-valuenow={progress}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="Upload progress"
-          >
-            <div className="h-1.5 overflow-hidden rounded-full bg-[#EEF2F6]">
-              <div
-                className="h-full rounded-full bg-cyan transition-[width] duration-200 motion-reduce:transition-none"
-                style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-              />
-            </div>
-            <p className={cn(adminMeta, "mt-1 text-[#5A6B82]")}>
-              Uploading · {progress}%
-            </p>
-          </div>
-        ) : null}
+        <AdminStreamUploadStatus
+          phase={
+            uploading
+              ? uploadPhase === "processing"
+                ? "processing"
+                : "uploading"
+              : "idle"
+          }
+          progress={uploading ? (progress ?? 0) : 0}
+          fileName={file?.name}
+        />
       </section>
 
       <section aria-labelledby={`${formId}-placements`}>
@@ -397,7 +517,11 @@ export function AdminVideosClient() {
             const assigned = items.find((item) => item.tag === opt.value);
             const remote = library.find((row) => row.uid === assigned?.stream_uid);
             const duration = formatDuration(assigned, remote);
-            const ready = assigned?.status === "ready";
+            const liveStatus = assigned
+              ? liveStreamStatus(assigned.status, remote?.status)
+              : "";
+            const kind = assigned ? streamStatusKind(liveStatus) : "empty";
+            const cardBusy = busyTag === opt.value;
             return (
               <li key={opt.value}>
                 <article
@@ -415,18 +539,7 @@ export function AdminVideosClient() {
                       </h3>
                       <p className={cn(adminSubtext, "mt-0.5")}>{opt.hint}</p>
                     </div>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]",
-                        assigned
-                          ? ready
-                            ? adminStatusBadgeStyles.live
-                            : adminStatusBadgeStyles.pending
-                          : adminStatusBadgeStyles.archived,
-                      )}
-                    >
-                      {assigned ? (ready ? "Ready" : assigned.status) : "Empty"}
-                    </span>
+                    <AdminStreamStatusBadge kind={kind} busy={cardBusy} />
                   </div>
                   <div className="mt-4 flex items-center justify-between gap-3 border-t border-[#EDF1F6] pt-3">
                     <p className="min-w-0 truncate text-sm font-semibold text-navy">
@@ -449,6 +562,15 @@ export function AdminVideosClient() {
                       ) : null}
                     </div>
                   </div>
+                  {kind === "processing" || cardBusy ? (
+                    <div
+                      className="mt-3 h-1 overflow-hidden rounded-full bg-[#EEF2F6]"
+                      role="status"
+                      aria-label="Processing on Stream"
+                    >
+                      <div className="admin-stream-indeterminate h-full w-1/3 rounded-full bg-cyan" />
+                    </div>
+                  ) : null}
                 </article>
               </li>
             );
@@ -482,7 +604,7 @@ export function AdminVideosClient() {
                   Placement
                 </th>
                 <th scope="col" className="px-4 py-3">
-                  <span className="sr-only">Assign</span>
+                  <span className="sr-only">Actions</span>
                 </th>
               </tr>
             </thead>
@@ -522,7 +644,17 @@ export function AdminVideosClient() {
                         </p>
                       </td>
                       <td className="hidden px-4 py-3.5 capitalize text-[#5A6B82] sm:table-cell">
-                        {item.status}
+                        {streamStatusKind(item.status) === "processing" ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Loader2
+                              className="size-3.5 motion-safe:animate-spin text-teal"
+                              aria-hidden
+                            />
+                            Processing
+                          </span>
+                        ) : (
+                          item.status
+                        )}
                       </td>
                       <td className="px-4 py-3.5">
                         <label className="sr-only" htmlFor={selectId}>
@@ -548,18 +680,45 @@ export function AdminVideosClient() {
                         </select>
                       </td>
                       <td className="px-4 py-3.5 text-right">
-                        <button
-                          type="button"
-                          className={adminBtnSecondary}
-                          disabled={busy}
-                          onClick={() => void onImport(item)}
-                        >
-                          {importingUid === item.uid
-                            ? "Saving…"
-                            : item.assigned_tag
-                              ? "Update"
-                              : "Assign"}
-                        </button>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            className={adminBtnSecondary}
+                            disabled={busy}
+                            onClick={() => void onImport(item)}
+                          >
+                            {importingUid === item.uid ? (
+                              <>
+                                <Loader2
+                                  className="mr-1.5 size-3.5 motion-safe:animate-spin"
+                                  aria-hidden
+                                />
+                                Updating…
+                              </>
+                            ) : item.assigned_tag ? (
+                              "Update"
+                            ) : (
+                              "Assign"
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            className={cn(
+                              adminBtnSecondary,
+                              "inline-flex items-center gap-1 text-rose-700",
+                            )}
+                            disabled={busy}
+                            onClick={() => {
+                              setError(null);
+                              setSuccess(null);
+                              setPendingDelete(item);
+                            }}
+                            aria-label={`Delete ${item.name}`}
+                          >
+                            <Trash2 className="size-3.5" aria-hidden />
+                            {deletingUid === item.uid ? "Deleting…" : "Delete"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -634,6 +793,25 @@ export function AdminVideosClient() {
           </form>
         </div>
       </details>
+
+      <AdminConfirmDialog
+        open={pendingDelete != null}
+        title={
+          pendingDelete ? `Delete “${pendingDelete.name}”?` : "Delete Stream video?"
+        }
+        description={
+          pendingDelete?.assigned_tag
+            ? "This removes the file from Cloudflare Stream and unassigns it from BandForge. Watch will be empty until you assign another video. This cannot be undone."
+            : "This permanently removes the file from Cloudflare Stream. This cannot be undone."
+        }
+        confirmLabel="Delete video"
+        tone="danger"
+        busy={deletingUid != null}
+        onCancel={() => {
+          if (!deletingUid) setPendingDelete(null);
+        }}
+        onConfirm={() => void onDelete()}
+      />
     </div>
   );
 }

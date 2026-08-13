@@ -1,3 +1,5 @@
+import { Upload as TusUpload } from "tus-js-client";
+
 /**
  * Prepare a video for Cloudflare Stream.
  * Files ≤ 150MB go through as-is (tus). Larger files must be uploaded
@@ -47,4 +49,35 @@ export async function prepareVideoForStreamUpload(
     originalBytes,
     finalBytes: originalBytes,
   };
+}
+
+/** PATCH to the Cloudflare TUS Location. `uploadUrl` skips a second create POST. */
+export function uploadFileToStreamTus(
+  file: File,
+  uploadURL: string,
+  onProgress: (pct: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const upload = new TusUpload(file, {
+      uploadUrl: uploadURL,
+      chunkSize: STREAM_TUS_CHUNK_BYTES,
+      retryDelays: [0, 3000, 5000, 10000, 20000],
+      uploadSize: file.size,
+      metadata: {
+        filename: file.name,
+        filetype: file.type || "video/mp4",
+      },
+      onError: (err) => reject(err),
+      onProgress: (bytesUploaded, bytesTotal) => {
+        const total = bytesTotal > 0 ? bytesTotal : file.size;
+        if (total <= 0) return;
+        onProgress(Math.min(100, Math.round((bytesUploaded / total) * 100)));
+      },
+      onSuccess: () => {
+        onProgress(100);
+        resolve();
+      },
+    });
+    upload.start();
+  });
 }

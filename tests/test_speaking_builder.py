@@ -24,6 +24,18 @@ def test_build_options_part2_includes_video_and_prep():
     assert opts["speak_time_sec"] == 15
 
 
+def test_question_prompt_can_be_empty():
+    q = SpeakingBuilderQuestionIn(
+        prompt="",
+        speak_time_sec=15,
+        min_skip_sec=5,
+        video_url="speaking/bank/part-1/clip.mp4",
+    )
+    assert q.prompt == ""
+    opts = _build_options(part=1, q=q)
+    assert opts["video_url"] == "speaking/bank/part-1/clip.mp4"
+
+
 def test_build_options_clamps_min_skip():
     q = SpeakingBuilderQuestionIn(
         prompt="Hello?",
@@ -61,7 +73,7 @@ def test_publish_blockers_require_speaking_when_enabled():
         enabled_modules={"listening", "reading", "speaking"},
     )
     assert any("Speaking Part 2" in b and "video" in b for b in blockers)
-    assert any("Speaking Part 3" in b for b in blockers)
+    assert not any("Speaking Part 3" in b for b in blockers)
 
 
 def test_default_kind():

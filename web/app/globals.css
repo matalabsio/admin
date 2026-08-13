@@ -913,3 +913,24 @@ html {
     page-break-after: avoid;
   }
 }
+
+@keyframes admin-stream-indeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+
+.admin-stream-indeterminate {
+  animation: admin-stream-indeterminate 1.15s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-stream-indeterminate {
+    animation: none;
+    width: 100%;
+    transform: none;
+  }
+}

@@ -66,6 +66,10 @@ def test_assert_valid_tag_rejects_unknown():
     assert exc.value.status_code == 400
 
 
+def test_assert_valid_tag_accepts_hero_intro():
+    assert assert_valid_tag("hero-intro") == "hero-intro"
+
+
 def test_skill_hub_videos_entry_is_exactly_one():
     out = skill_hub_videos_entry(
         title="Listening intro",
@@ -135,6 +139,16 @@ def test_practice_video_accepts_stream_fields():
     assert legacy.tag is None
 
 
+def test_status_from_video_maps_stream_states():
+    from app.admin.stream_videos import _status_from_video
+
+    assert _status_from_video(None) == "processing"
+    assert _status_from_video({"status": {"state": "inprogress"}}) == "processing"
+    assert _status_from_video({"status": {"state": "ready"}}) == "ready"
+    assert _status_from_video({"status": {"state": "complete"}}) == "ready"
+    assert _status_from_video({"status": {"state": "error"}}) == "error"
+
+
 def test_list_stream_library_merges_assigned_tag():
     from app.admin import stream_videos as sv
 
@@ -170,6 +184,53 @@ def test_list_stream_library_merges_assigned_tag():
     assert by_uid["aaa111aaa111aaa111aaa111aaa111aa"]["assigned_tag"] is None
     assert by_uid["aaa111aaa111aaa111aaa111aaa111aa"]["name"] == "listening-intro-720p.mp4"
     assert by_uid["bbb222bbb222bbb222bbb222bbb222bb"]["assigned_tag"] == "ielts-intro"
+
+
+def test_delete_video_treats_404_as_success():
+    from app.storage import stream as stream_mod
+
+    fake = MagicMock()
+    fake.status_code = 404
+    fake.json.return_value = {"success": False, "errors": [{"message": "not found"}]}
+    fake_client = MagicMock()
+    fake_client.__enter__.return_value.delete.return_value = fake
+    fake_client.__exit__.return_value = False
+    with (
+        patch.object(stream_mod, "_credentials", return_value=("acct", "token")),
+        patch.object(stream_mod.httpx, "Client", return_value=fake_client),
+    ):
+        stream_mod.delete_video("479d46fb3847e47b3a569d6a9ae05586")
+
+
+def test_delete_stream_library_video_unassigns_and_clears_hubs():
+    from app.admin import stream_videos as sv
+
+    chain = MagicMock()
+    chain.select.return_value = chain
+    chain.delete.return_value = chain
+    chain.eq.return_value = chain
+    chain.execute.side_effect = [
+        MagicMock(data=[{"tag": "listening-intro"}]),
+        MagicMock(data=[]),
+    ]
+    sb = MagicMock()
+    sb.table.return_value = chain
+
+    with (
+        patch.object(sv, "delete_video") as delete_remote,
+        patch.object(sv, "_clear_skill_hubs", return_value=2) as clear_hubs,
+        patch.object(sv, "log_admin_action"),
+        patch("app.admin.stream_videos.get_supabase", return_value=sb),
+    ):
+        out = sv.delete_stream_library_video(
+            stream_uid="479d46fb3847e47b3a569d6a9ae05586",
+            admin_id="admin-1",
+        )
+    delete_remote.assert_called_once_with("479d46fb3847e47b3a569d6a9ae05586")
+    clear_hubs.assert_called_once_with("listening-intro")
+    assert out["ok"] is True
+    assert out["unassigned_tag"] == "listening-intro"
+    assert out["hubs_updated"] == 2
 
 
 def test_create_direct_upload_maps_quota_error():

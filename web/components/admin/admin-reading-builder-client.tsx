@@ -21,6 +21,7 @@ import {
 } from "@/components/admin/admin-builder-source";
 import { AdminBuilderStickyBar } from "@/components/admin/admin-builder-sticky-bar";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
+import { AdminSetWatchVideoCard } from "@/components/admin/admin-set-watch-video-card";
 import {
   adminBtnPrimary,
   adminBtnSecondary,
@@ -780,6 +781,10 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
       />
 
       <PassageTabs source={source} part={part} passageCount={passageCount} />
+
+      {source.kind === "bank" ? (
+        <AdminSetWatchVideoCard setId={source.setId} className="mt-5" />
+      ) : null}
 
       {error && (
         <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
