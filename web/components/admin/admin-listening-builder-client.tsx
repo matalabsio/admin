@@ -50,7 +50,7 @@ import {
   type MatchingGroupDraft,
 } from "@/lib/matching-group";
 import {
-  STREAM_SOFT_MAX_BYTES,
+  STREAM_DIRECT_MAX_BYTES,
   STREAM_TUS_CHUNK_BYTES,
   formatVideoBytes,
   prepareVideoForStreamUpload,
@@ -257,9 +257,6 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const [videoInR2, setVideoInR2] = useState<boolean | null>(null);
   const [pendingVideo, setPendingVideo] = useState<File | null>(null);
-  const [videoPhase, setVideoPhase] = useState<"idle" | "compress" | "upload">(
-    "idle",
-  );
   const [videoProgress, setVideoProgress] = useState<number | null>(null);
 
   const isBank = source.kind === "bank";
@@ -461,23 +458,15 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
       return;
     }
     if (!pendingVideo) {
-      setError("Choose a compressed video first.");
+      setError(`Choose an MP4/WebM first (max ${formatVideoBytes(STREAM_DIRECT_MAX_BYTES)}).`);
       return;
     }
     setVideoUploading(true);
     setError(null);
     setSaveMsg(null);
-    setVideoPhase("compress");
     setVideoProgress(0);
     try {
-      const prepared = await prepareVideoForStreamUpload(
-        pendingVideo,
-        (p, pct) => {
-          setVideoPhase(p === "compress" ? "compress" : "upload");
-          if (p === "compress") setVideoProgress(pct);
-        },
-      );
-      setVideoPhase("upload");
+      const prepared = await prepareVideoForStreamUpload(pendingVideo);
       setVideoProgress(0);
       const created = await adminApi.createBankWatchVideoDirectUpload(
         source.setId,
@@ -529,7 +518,6 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
       setVideoProgress(null);
     } finally {
       setVideoUploading(false);
-      setVideoPhase("idle");
     }
   }
 
@@ -1079,9 +1067,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
                   onClick={() => void uploadWatchVideo()}
                 >
                   {videoUploading
-                    ? videoPhase === "compress"
-                      ? "Compressing…"
-                      : "Uploading to Stream…"
+                    ? "Uploading to Stream…"
                     : videoKey
                       ? "Replace on Stream"
                       : "Upload to Stream"}
@@ -1098,15 +1084,15 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
               {pendingVideo ? (
                 <p className={cn(adminMeta, "mt-3")}>
                   {pendingVideo.name} · {formatVideoBytes(pendingVideo.size)}
-                  {pendingVideo.size > STREAM_SOFT_MAX_BYTES
-                    ? " · will compress before upload"
-                    : " · ready"}
+                  {pendingVideo.size > STREAM_DIRECT_MAX_BYTES
+                    ? " · too large — use the Cloudflare panel"
+                    : " · sent direct to Stream"}
                 </p>
               ) : (
                 <p className={cn(adminMeta, "mt-3")}>
                   {videoKey
                     ? `Stream UID · ${videoKey} (signed playback)`
-                    : `Prefer compressed MP4 ≤ ${formatVideoBytes(STREAM_SOFT_MAX_BYTES)}`}
+                    : `MP4 ≤ ${formatVideoBytes(STREAM_DIRECT_MAX_BYTES)} · no compress`}
                 </p>
               )}
               {videoProgress != null ? (
@@ -1120,8 +1106,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
                     />
                   </div>
                   <p className={cn(adminMeta, "mt-1")}>
-                    {videoPhase === "compress" ? "Compressing" : "Uploading"} ·{" "}
-                    {videoProgress}%
+                    Uploading · {videoProgress}%
                   </p>
                 </div>
               ) : null}

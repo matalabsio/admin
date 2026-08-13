@@ -9,7 +9,7 @@ import {
   type StreamVideoTag,
 } from "@/lib/admin-api";
 import {
-  STREAM_SOFT_MAX_BYTES,
+  STREAM_DIRECT_MAX_BYTES,
   STREAM_TUS_CHUNK_BYTES,
   formatVideoBytes,
   prepareVideoForStreamUpload,
@@ -58,7 +58,6 @@ export function AdminSkillWatchVideoCard({
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [attaching, setAttaching] = useState(false);
-  const [phase, setPhase] = useState<"idle" | "compress" | "upload">("idle");
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -85,20 +84,15 @@ export function AdminSkillWatchVideoCard({
 
   async function onUpload() {
     if (!file) {
-      setError("Choose a compressed MP4/WebM first (aim for ≤ 80 MB).");
+      setError(`Choose an MP4/WebM first (max ${formatVideoBytes(STREAM_DIRECT_MAX_BYTES)}).`);
       return;
     }
     setUploading(true);
     setError(null);
     setSuccess(null);
     setProgress(0);
-    setPhase("compress");
     try {
-      const prepared = await prepareVideoForStreamUpload(file, (p, pct) => {
-        setPhase(p === "compress" ? "compress" : "upload");
-        if (p === "compress") setProgress(pct);
-      });
-      setPhase("upload");
+      const prepared = await prepareVideoForStreamUpload(file);
       setProgress(0);
       const created = await adminApi.createStreamDirectUpload({
         tag,
@@ -151,7 +145,6 @@ export function AdminSkillWatchVideoCard({
       setProgress(null);
     } finally {
       setUploading(false);
-      setPhase("idle");
     }
   }
 
@@ -314,9 +307,7 @@ export function AdminSkillWatchVideoCard({
             >
               <Upload className="size-3.5" aria-hidden />
               {uploading
-                ? phase === "compress"
-                  ? "Compressing…"
-                  : "Uploading to Stream…"
+                ? "Uploading to Stream…"
                 : existing
                   ? "Replace on Stream"
                   : "Upload to Stream"}
@@ -325,14 +316,14 @@ export function AdminSkillWatchVideoCard({
           {file ? (
             <p className={cn(adminMeta, "mt-2")}>
               {file.name} · {formatVideoBytes(file.size)}
-              {file.size > STREAM_SOFT_MAX_BYTES
-                ? " · will compress before upload"
-                : " · ready"}
+              {file.size > STREAM_DIRECT_MAX_BYTES
+                ? " · too large — use the Cloudflare panel"
+                : " · sent direct to Stream"}
             </p>
           ) : (
             <p className={cn(adminMeta, "mt-2")}>
-              Tag <span className="text-navy">{tag}</span> · prefer compressed
-              MP4 ≤ {formatVideoBytes(STREAM_SOFT_MAX_BYTES)}
+              Tag <span className="text-navy">{tag}</span> · MP4 ≤{" "}
+              {formatVideoBytes(STREAM_DIRECT_MAX_BYTES)}, no compress
             </p>
           )}
         </div>
@@ -347,7 +338,7 @@ export function AdminSkillWatchVideoCard({
             />
           </div>
           <p className={cn(adminMeta, "mt-1")}>
-            {phase === "compress" ? "Compressing" : "Uploading"} · {progress}%
+            Uploading · {progress}%
           </p>
         </div>
       ) : null}
