@@ -274,12 +274,17 @@ export function AdminDashboardClient() {
     };
   }, []);
 
-  const liveMocks = useMemo(
-    () => mocks.filter((m) => m.is_published && m.catalog_number != null),
+  const catalogMocks = useMemo(
+    () => mocks.filter((m) => m.catalog_number != null),
     [mocks],
   );
+  const liveMocks = useMemo(
+    () => catalogMocks.filter((m) => m.is_published),
+    [catalogMocks],
+  );
+  const mockCount = catalogMocks.length;
   const liveCount = liveMocks.length;
-  const comingSoonCount = Math.max(0, 6 - liveCount);
+  const comingSoonCount = Math.max(0, mockCount - liveCount);
 
   const moduleBars: BarItem[] = useMemo(
     () =>
@@ -295,8 +300,8 @@ export function AdminDashboardClient() {
   );
 
   const catalogModules: CatalogModuleStat[] = useMemo(() => {
-    const base = CATALOG_MODULES.map((m) => catalogModuleStat(mocks, m));
-    const full = mocks.reduce(
+    const base = CATALOG_MODULES.map((m) => catalogModuleStat(catalogMocks, m));
+    const full = catalogMocks.reduce(
       (acc, mock) => {
         if (!mockIsFullTest(mock)) return acc;
         if (mockIsLive(mock)) acc.live += 1;
@@ -306,7 +311,7 @@ export function AdminDashboardClient() {
       { label: "Full tests", live: 0, soon: 0 } as CatalogModuleStat,
     );
     return [...base, full];
-  }, [mocks]);
+  }, [catalogMocks]);
 
   const recentMocks = useMemo(
     () =>
@@ -386,11 +391,7 @@ export function AdminDashboardClient() {
                 value={metrics.total_users.toLocaleString()}
                 trendPct={metrics.users_trend_pct}
               />
-              <HeroStat
-                label="Mocks"
-                value={metrics.total_mocks ?? mocks.length}
-                trendPct={metrics.mocks_trend_pct}
-              />
+              <HeroStat label="Mocks" value={mockCount} />
               <HeroStat label="Live tests" value={liveCount} />
             </div>
           </div>

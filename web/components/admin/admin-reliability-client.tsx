@@ -121,13 +121,6 @@ export function AdminReliabilityClient() {
             <button
               type="button"
               className={adminBtnSecondary}
-              onClick={() => void adminApi.downloadReliabilitySnapshotCsv()}
-            >
-              Download CSV
-            </button>
-            <button
-              type="button"
-              className={adminBtnSecondary}
               onClick={() => void load()}
               disabled={loading}
             >

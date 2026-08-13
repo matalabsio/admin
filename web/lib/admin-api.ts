@@ -1530,17 +1530,6 @@ export const adminApi = {
     return adminDownload("/exports/users-overview.csv", "users-overview.csv");
   },
 
-  downloadReliabilitySnapshotCsv() {
-    return adminDownload(
-      "/exports/reliability-snapshot.csv",
-      "reliability-snapshot.csv",
-    );
-  },
-
-  downloadHubProgress7dCsv() {
-    return adminDownload("/exports/hub-progress-7d.csv", "hub-progress-7d.csv");
-  },
-
   listQuestionBank(skill: string) {
     return adminCall<QuestionBankListResponse>(
       `/question-bank?skill=${encodeURIComponent(skill)}`,
