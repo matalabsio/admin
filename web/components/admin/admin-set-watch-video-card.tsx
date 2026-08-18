@@ -7,6 +7,7 @@ import {
   AdminStreamStatusBadge,
   AdminStreamUploadStatus,
 } from "@/components/admin/admin-stream-status";
+import { AdminFileDropZone } from "@/components/admin/admin-file-drop-zone";
 import {
   adminBtnPrimary,
   adminBtnSecondary,
@@ -183,56 +184,66 @@ export function AdminSetWatchVideoCard({
         </div>
       ) : null}
 
-      <input
-        ref={inputRef}
-        type="file"
-        accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
-        className="hidden"
+      <AdminFileDropZone
         disabled={uploading}
-        onChange={(e) => {
-          setFile(e.target.files?.[0] ?? null);
+        hint="Drop a video here or click Choose video."
+        onFile={(next) => {
+          setFile(next);
           setError(null);
           setSuccess(null);
         }}
-      />
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          className={cn(adminBtnSecondary, "gap-2")}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+          className="hidden"
           disabled={uploading}
-          onClick={() => inputRef.current?.click()}
-        >
-          <Video className="size-3.5" aria-hidden />
-          Choose video
-        </button>
-        <button
-          type="button"
-          className={adminBtnPrimary}
-          disabled={uploading || !file}
-          onClick={() => void onUpload()}
-        >
-          {uploading ? (
-            <Loader2 className="size-3.5 motion-safe:animate-spin" aria-hidden />
-          ) : (
-            <Upload className="size-3.5" aria-hidden />
-          )}
-          {uploading
-            ? uploadPhase === "processing"
-              ? "Processing…"
-              : "Uploading…"
-            : uid
-              ? "Replace on Stream"
-              : "Upload to Stream"}
-        </button>
-        <button
-          type="button"
-          className={adminBtnSecondary}
-          disabled={uploading}
-          onClick={() => void loadStatus().catch(() => undefined)}
-        >
-          Check Stream
-        </button>
-      </div>
+          onChange={(e) => {
+            setFile(e.target.files?.[0] ?? null);
+            setError(null);
+            setSuccess(null);
+          }}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className={cn(adminBtnSecondary, "gap-2")}
+            disabled={uploading}
+            onClick={() => inputRef.current?.click()}
+          >
+            <Video className="size-3.5" aria-hidden />
+            Choose video
+          </button>
+          <button
+            type="button"
+            className={adminBtnPrimary}
+            disabled={uploading || !file}
+            onClick={() => void onUpload()}
+          >
+            {uploading ? (
+              <Loader2 className="size-3.5 motion-safe:animate-spin" aria-hidden />
+            ) : (
+              <Upload className="size-3.5" aria-hidden />
+            )}
+            {uploading
+              ? uploadPhase === "processing"
+                ? "Processing…"
+                : "Uploading…"
+              : uid
+                ? "Replace on Stream"
+                : "Upload to Stream"}
+          </button>
+          <button
+            type="button"
+            className={adminBtnSecondary}
+            disabled={uploading}
+            onClick={() => void loadStatus().catch(() => undefined)}
+          >
+            Check Stream
+          </button>
+        </div>
+      </AdminFileDropZone>
       {file ? (
         <p className={cn(adminMeta, "mt-3")}>
           {file.name} · {formatVideoBytes(file.size)}

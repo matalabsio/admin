@@ -15,6 +15,7 @@ import {
   uploadFileToStreamTus,
 } from "@/lib/stream-video-upload";
 import { AdminStreamUploadStatus } from "@/components/admin/admin-stream-status";
+import { AdminFileDropZone } from "@/components/admin/admin-file-drop-zone";
 import {
   adminBtnPrimary,
   adminBtnSecondary,
@@ -298,32 +299,43 @@ export function AdminSkillWatchVideoCard({
               setSuccess(null);
             }}
           />
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              className={adminBtnSecondary}
-              disabled={uploading || attaching}
-              onClick={() => inputRef.current?.click()}
-            >
-              <Video className="size-3.5" aria-hidden />
-              Choose video
-            </button>
-            <button
-              type="button"
-              className={adminBtnPrimary}
-              disabled={uploading || attaching || !file}
-              onClick={() => void onUpload()}
-            >
-              <Upload className="size-3.5" aria-hidden />
-              {uploading
-                ? uploadPhase === "processing"
-                  ? "Processing on Stream…"
-                  : "Uploading to Stream…"
-                : existing
-                  ? "Replace on Stream"
-                  : "Upload to Stream"}
-            </button>
-          </div>
+          <AdminFileDropZone
+            className="mt-2"
+            disabled={uploading || attaching}
+            hint="Drop a video here or click Choose video."
+            onFile={(next) => {
+              setFile(next);
+              setError(null);
+              setSuccess(null);
+            }}
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                className={adminBtnSecondary}
+                disabled={uploading || attaching}
+                onClick={() => inputRef.current?.click()}
+              >
+                <Video className="size-3.5" aria-hidden />
+                Choose video
+              </button>
+              <button
+                type="button"
+                className={adminBtnPrimary}
+                disabled={uploading || attaching || !file}
+                onClick={() => void onUpload()}
+              >
+                <Upload className="size-3.5" aria-hidden />
+                {uploading
+                  ? uploadPhase === "processing"
+                    ? "Processing on Stream…"
+                    : "Uploading to Stream…"
+                  : existing
+                    ? "Replace on Stream"
+                    : "Upload to Stream"}
+              </button>
+            </div>
+          </AdminFileDropZone>
           {file ? (
             <p className={cn(adminMeta, "mt-2")}>
               {file.name} · {formatVideoBytes(file.size)}

@@ -55,6 +55,7 @@ function IngestForm({ mockId }: Props) {
   const [audioPlayable, setAudioPlayable] = useState<boolean | null>(null);
   const [audioSizeBytes, setAudioSizeBytes] = useState<number | null>(null);
   const [preview, setPreview] = useState<unknown>(null);
+  const [dragOverAudio, setDragOverAudio] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -250,7 +251,26 @@ function IngestForm({ mockId }: Props) {
 
           <label className="block text-sm font-medium text-black">
             MP3 file
-            <div className="mt-2 rounded-xl border border-dashed border-[#CDE3EA] bg-[#F8FCFD] p-4">
+            <div
+              className={cn(
+                "mt-2 rounded-xl border border-dashed bg-[#F8FCFD] p-4 transition-colors",
+                dragOverAudio ? "border-cyan bg-[#F2FBFD]" : "border-[#CDE3EA]",
+              )}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (!busy) setDragOverAudio(true);
+              }}
+              onDragLeave={() => setDragOverAudio(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverAudio(false);
+                if (busy) return;
+                const file = e.dataTransfer.files?.[0] ?? null;
+                if (!file) return;
+                setAudioFile(file);
+                setAudioUploaded(false);
+              }}
+            >
               <input
               ref={fileInputRef}
               type="file"
@@ -262,9 +282,7 @@ function IngestForm({ mockId }: Props) {
               }}
                 className="block w-full text-sm text-ink/70 file:mr-3 file:rounded-lg file:border-0 file:bg-cyan-soft file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-teal"
               />
-              <p className="mt-2 text-xs text-[#94A3B8]">
-                Drag and drop is supported by your browser file picker.
-              </p>
+              <p className="mt-2 text-xs text-[#94A3B8]">Drop an MP3 here or choose a file.</p>
             </div>
           </label>
           {audioFile ? (

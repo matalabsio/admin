@@ -20,6 +20,7 @@ import {
   builderPartHref,
 } from "@/components/admin/admin-builder-source";
 import { AdminBuilderStickyBar } from "@/components/admin/admin-builder-sticky-bar";
+import { AdminFileDropZone } from "@/components/admin/admin-file-drop-zone";
 import { AdminSetWatchVideoCard } from "@/components/admin/admin-set-watch-video-card";
 import {
   adminBtnPrimary,
@@ -28,6 +29,11 @@ import {
   adminLink,
   adminMutedLabel,
 } from "@/components/admin/admin-ui";
+import { AdminInlineRichTextEditor } from "@/components/admin/admin-inline-rich-text-editor";
+import {
+  hasRichTextContent,
+  richHtmlToPlainText,
+} from "@/lib/rich-text-html";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -290,7 +296,7 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
     try {
       const saveBody = {
         questions: questions.map((q) => ({
-          prompt: q.prompt.trim(),
+          prompt: q.prompt,
           speak_time_sec: q.speak_time_sec,
           min_skip_sec: Math.min(q.min_skip_sec, q.speak_time_sec),
           prep_sec: safePart === 2 ? q.prep_sec || 60 : 0,
@@ -512,47 +518,54 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
                     <p className={cn(adminMutedLabel, "mb-2")}>
                       Examiner video (10–15s MP4 / WebM)
                     </p>
-                    <div className="mb-3.5 flex flex-wrap items-center gap-3">
-                      <input
-                        ref={(el) => {
-                          fileRefs.current[q.localId] = el;
-                        }}
-                        type="file"
-                        accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          e.target.value = "";
-                          if (file) void uploadVideo(q.localId, file);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        disabled={q.uploading}
-                        onClick={() => fileRefs.current[q.localId]?.click()}
-                        className={cn(
-                          adminBtnSecondary,
-                          "gap-1.5 rounded-[9px] px-3 py-2 text-[13px]",
-                        )}
-                      >
-                        <Upload className="size-3.5" />
-                        {q.uploading ? "Uploading…" : "Upload video"}
-                      </button>
-                      {q.video_url || q.localPreviewUrl ? (
+                    <AdminFileDropZone
+                      className="mb-3.5"
+                      disabled={q.uploading}
+                      hint="Drop a video here or click Upload video."
+                      onFile={(file) => void uploadVideo(q.localId, file)}
+                    >
+                      <div className="flex flex-wrap items-center gap-3">
+                        <input
+                          ref={(el) => {
+                            fileRefs.current[q.localId] = el;
+                          }}
+                          type="file"
+                          accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (file) void uploadVideo(q.localId, file);
+                          }}
+                        />
                         <button
                           type="button"
-                          onClick={() => clearVideo(q.localId)}
-                          className="text-[12.5px] font-semibold text-[#5A6B82] hover:text-[#B4474B]"
+                          disabled={q.uploading}
+                          onClick={() => fileRefs.current[q.localId]?.click()}
+                          className={cn(
+                            adminBtnSecondary,
+                            "gap-1.5 rounded-[9px] px-3 py-2 text-[13px]",
+                          )}
                         >
-                          Clear
+                          <Upload className="size-3.5" />
+                          {q.uploading ? "Uploading…" : "Upload video"}
                         </button>
-                      ) : null}
-                      {safePart === 2 && !q.video_url ? (
-                        <span className="text-xs font-medium text-[#B4474B]">
-                          Required for Part 2
-                        </span>
-                      ) : null}
-                    </div>
+                        {q.video_url || q.localPreviewUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => clearVideo(q.localId)}
+                            className="text-[12.5px] font-semibold text-[#5A6B82] hover:text-[#B4474B]"
+                          >
+                            Clear
+                          </button>
+                        ) : null}
+                        {safePart === 2 && !q.video_url ? (
+                          <span className="text-xs font-medium text-[#B4474B]">
+                            Required for Part 2
+                          </span>
+                        ) : null}
+                      </div>
+                    </AdminFileDropZone>
 
                     <div className="mb-4 flex items-center gap-3.5">
                       {videoSrc ? (
@@ -635,19 +648,16 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
                           <span className={cn(adminMutedLabel, "mb-2 block")}>
                             Cue card (optional — leave empty if the video is enough)
                           </span>
-                          <textarea
+                          <AdminInlineRichTextEditor
                             rows={4}
                             placeholder={
                               "Describe a time you… You should say:\n• when it happened\n• where you were\n• …"
                             }
-                            className={cn(
-                              adminInput,
-                              "mt-0 min-h-[100px] resize-y rounded-[9px] px-[13px] py-[11px] text-[13.5px] leading-[1.55]",
-                            )}
+                            className="mt-0"
                             value={q.prompt}
-                            onChange={(e) =>
+                            onChange={(next) =>
                               updateQuestion(q.localId, {
-                                prompt: e.target.value,
+                                prompt: next,
                               })
                             }
                           />
@@ -678,17 +688,14 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
                         <span className={cn(adminMutedLabel, "mb-2 block")}>
                           Question prompt (optional)
                         </span>
-                        <textarea
+                        <AdminInlineRichTextEditor
                           rows={2}
                           placeholder="Optional — leave empty to use the video only"
-                          className={cn(
-                            adminInput,
-                            "mt-0 min-h-[72px] resize-y rounded-[9px] px-[13px] py-[11px] text-[13.5px] leading-[1.55]",
-                          )}
+                          className="mt-0"
                           value={q.prompt}
-                          onChange={(e) =>
+                          onChange={(next) =>
                             updateQuestion(q.localId, {
-                              prompt: e.target.value,
+                              prompt: next,
                             })
                           }
                         />
@@ -737,13 +744,13 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
               )}
             </div>
 
-            {safePart === 2 && previewQ.prompt.trim() ? (
+            {safePart === 2 && hasRichTextContent(previewQ.prompt) ? (
               <div className="mb-5 whitespace-pre-wrap rounded-xl bg-white/[0.06] px-[22px] py-[18px] text-[14.5px] leading-relaxed text-[#E2E8F0]">
-                {previewQ.prompt}
+                {richHtmlToPlainText(previewQ.prompt)}
               </div>
-            ) : previewQ.prompt.trim() ? (
+            ) : hasRichTextContent(previewQ.prompt) ? (
               <p className="mb-5 text-[15px] font-medium leading-relaxed text-white">
-                {previewQ.prompt}
+                {richHtmlToPlainText(previewQ.prompt)}
               </p>
             ) : null}
 

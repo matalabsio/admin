@@ -12,6 +12,12 @@ import {
 import { AdminBuilderStickyBar } from "@/components/admin/admin-builder-sticky-bar";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import { AdminSetWatchVideoCard } from "@/components/admin/admin-set-watch-video-card";
+import { AdminFileDropZone } from "@/components/admin/admin-file-drop-zone";
+import { AdminInlineRichTextEditor } from "@/components/admin/admin-inline-rich-text-editor";
+import {
+  hasRichTextContent,
+  richHtmlToPlainText,
+} from "@/lib/rich-text-html";
 import {
   adminBtnPrimary,
   adminBtnSecondary,
@@ -58,7 +64,7 @@ export function AdminWritingBuilderClient({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const promptReady = prompt.trim().length > 0;
+  const promptReady = hasRichTextContent(prompt);
   const completionLabel = promptReady ? "Prompt added" : "No prompt";
   const displayImageSrc = localPreviewUrl || imagePreviewUrl;
 
@@ -177,7 +183,7 @@ export function AdminWritingBuilderClient({
   }
 
   async function handleSave() {
-    if (!prompt.trim()) {
+    if (!hasRichTextContent(prompt)) {
       setError("Add a prompt before saving.");
       return;
     }
@@ -200,7 +206,7 @@ export function AdminWritingBuilderClient({
       }
 
       const saveBody = {
-        prompt: prompt.trim(),
+        prompt,
         question_type: questionType,
         options,
         // Empty string clears Task 1 image; null leaves existing (Task 2)
@@ -253,7 +259,7 @@ export function AdminWritingBuilderClient({
           <div>
             <p className={adminMutedLabel}>Task {safePart} prompt</p>
             <p className="mt-2 whitespace-pre-wrap text-[15px] leading-relaxed text-navy">
-              {prompt.trim() || "(no prompt yet)"}
+              {richHtmlToPlainText(prompt) || "(no prompt yet)"}
             </p>
           </div>
           {safePart === 1 && displayImageSrc ? (
@@ -347,13 +353,14 @@ export function AdminWritingBuilderClient({
         <h2 className={cn(adminHeading, "text-[17px]")}>
           Task {safePart} prompt
         </h2>
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          rows={8}
-          placeholder={placeholder}
-          className={cn(adminInput, "mt-3 min-h-[180px] resize-y")}
-        />
+        <div className="mt-3">
+          <AdminInlineRichTextEditor
+            value={prompt}
+            onChange={setPrompt}
+            rows={8}
+            placeholder={placeholder}
+          />
+        </div>
       </div>
 
       {safePart === 1 && (
@@ -366,44 +373,51 @@ export function AdminWritingBuilderClient({
             the question.
           </p>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => onFileChosen(e.target.files?.[0] ?? null)}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className={cn(adminBtnSecondary, "gap-2")}
-            >
-              <ImagePlus className="size-4" />
-              Choose image
-            </button>
-            <button
-              type="button"
-              disabled={uploading || !pendingFile}
-              onClick={() => void uploadImage()}
-              className={adminBtnPrimary}
-            >
-              {uploading ? "Uploading…" : "Upload to R2"}
-            </button>
-            {(imageKey || localPreviewUrl) && (
+          <AdminFileDropZone
+            className="mt-4"
+            disabled={uploading}
+            hint="Drop an image here or click Choose image."
+            onFile={(file) => onFileChosen(file)}
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => onFileChosen(e.target.files?.[0] ?? null)}
+              />
               <button
                 type="button"
-                onClick={removeImage}
-                className={cn(
-                  adminBtnSecondary,
-                  "gap-2 border-red-200 text-[#B4474B] hover:bg-red-50",
-                )}
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(adminBtnSecondary, "gap-2")}
               >
-                <Trash2 className="size-4" />
-                Remove
+                <ImagePlus className="size-4" />
+                Choose image
               </button>
-            )}
-          </div>
+              <button
+                type="button"
+                disabled={uploading || !pendingFile}
+                onClick={() => void uploadImage()}
+                className={adminBtnPrimary}
+              >
+                {uploading ? "Uploading…" : "Upload to R2"}
+              </button>
+              {(imageKey || localPreviewUrl) && (
+                <button
+                  type="button"
+                  onClick={removeImage}
+                  className={cn(
+                    adminBtnSecondary,
+                    "gap-2 border-red-200 text-[#B4474B] hover:bg-red-50",
+                  )}
+                >
+                  <Trash2 className="size-4" />
+                  Remove
+                </button>
+              )}
+            </div>
+          </AdminFileDropZone>
 
           <p className="mt-3 font-mono text-xs text-[#94A3B8]">
             {imageName || "No image selected"}
