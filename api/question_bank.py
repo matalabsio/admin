@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
+from postgrest.exceptions import APIError
 
 from app.admin.answer_format import (
     expand_choose_two_rows,
@@ -740,7 +741,19 @@ def delete_question_bank_set(
 
     title = str(row.get("title") or "")
     set_number = int(row.get("set_number") or 0)
-    sb.table("practice_sets").delete().eq("id", str(set_id)).execute()
+    sid = str(set_id)
+    sb.table("user_practice_assignments").delete().eq("practice_set_id", sid).execute()
+    try:
+        sb.table("practice_sets").delete().eq("id", sid).execute()
+    except APIError as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Cannot delete this practice set because it is still referenced.",
+                "code": "delete_blocked",
+                "detail": getattr(exc, "message", None) or str(exc),
+            },
+        ) from exc
 
     _clear_practice_catalog_cache()
 

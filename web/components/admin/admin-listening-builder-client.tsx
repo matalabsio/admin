@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
+  GripVertical,
   Pause,
   Pencil,
   Play,
@@ -40,6 +41,9 @@ import {
 } from "@/components/admin/admin-ui";
 import { cn } from "@/lib/utils";
 import { AdminMatchingGroupEditor } from "@/components/admin/admin-matching-group-editor";
+import { AdminInlineRichTextEditor } from "@/components/admin/admin-inline-rich-text-editor";
+import { AdminRichTextPreview } from "@/components/admin/admin-rich-text-preview";
+import { hasRichTextContent, richHtmlToPlainText } from "@/lib/rich-text-html";
 import {
   defaultMatchingGroup,
   findConsecutiveTypeRange,
@@ -244,6 +248,8 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [audioInR2, setAudioInR2] = useState<boolean | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [dragOverAudio, setDragOverAudio] = useState(false);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
 
   const isBank = source.kind === "bank";
 
@@ -427,6 +433,20 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
     }
   }
 
+  const onDropReorder = (toIndex: number) => {
+    if (dragFrom == null || dragFrom === toIndex) {
+      setDragFrom(null);
+      return;
+    }
+    setQuestions((prev) => {
+      const copy = [...prev];
+      const [item] = copy.splice(dragFrom, 1);
+      copy.splice(toIndex, 0, item);
+      return copy;
+    });
+    setDragFrom(null);
+  };
+
   function openDraft() {
     if (isListeningMatchingType(selectedType)) {
       setDraft(null);
@@ -545,7 +565,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
 
   function saveDraft() {
     if (!draft) return;
-    if (!draft.text.trim()) {
+    if (!hasRichTextContent(draft.text)) {
       setError("Question text is required.");
       return;
     }
@@ -572,7 +592,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
     const record: LocalQuestion = {
       localId: editingId || uid(),
       type: draft.type,
-      text: draft.text.trim(),
+      text: draft.text,
       options: isOptionType(draft.type) ? draft.options : null,
       answer: isTextType(draft.type) ? draft.answer.trim() : "",
       altAnswers: isTextType(draft.type)
@@ -623,7 +643,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
       return;
     }
     const incomplete = questions.findIndex((q) => {
-      if (!q.text.trim()) return true;
+      if (!hasRichTextContent(q.text)) return true;
       if (isOptionType(q.type)) {
         const n = q.options?.filter((o) => o.correct).length ?? 0;
         return isCheckboxTwo(q.type) ? n !== 2 : n !== 1;
@@ -734,9 +754,13 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
               <p className="mb-1.5 font-mono text-xs text-[#94A3B8]">
                 Q{i + 1} · {q.type}
               </p>
-              <p className="mb-3 text-[15px] font-semibold text-navy">
-                {q.text || "(no question text)"}
-              </p>
+              <div className="mb-3 text-[15px] font-normal text-navy">
+                {q.text ? (
+                  <AdminRichTextPreview value={q.text} className="border-0 bg-transparent p-0" />
+                ) : (
+                  "(no question text)"
+                )}
+              </div>
               {isOptionType(q.type) && q.options && (
                 <div className="flex flex-col gap-2">
                   {q.options.map((o) => (
@@ -848,6 +872,24 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
             <track kind="captions" />
           </audio>
 
+          <div
+            className={cn(
+              "rounded-xl border border-dashed p-3 transition-colors",
+              dragOverAudio ? "border-cyan bg-[#F2FBFD]" : "border-[#E4E9F0] bg-[#FBFCFE]",
+            )}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!uploading) setDragOverAudio(true);
+            }}
+            onDragLeave={() => setDragOverAudio(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOverAudio(false);
+              if (uploading) return;
+              const file = e.dataTransfer.files?.[0] ?? null;
+              if (file) onFileChosen(file);
+            }}
+          >
           <div className="flex flex-wrap items-center gap-3">
             <input
               ref={fileInputRef}
@@ -892,6 +934,8 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
             >
               Check R2
             </button>
+          </div>
+          <p className={cn(adminMeta, "mt-2")}>Drop an MP3 here or click Choose MP3.</p>
           </div>
           <p className={cn(adminMeta, "mt-3")}>
             {audioName || "No file selected"}
@@ -981,33 +1025,16 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
           </div>
 
           <label className={cn(adminMutedLabel, "mb-2 block")}>
-            Difficulty
-          </label>
-          <select
-            value={draft.difficulty}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                difficulty: e.target.value as "easy" | "medium" | "hard",
-              })
-            }
-            className={cn(adminInput, "mt-0 mb-5 max-w-[200px]")}
-          >
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-
-          <label className={cn(adminMutedLabel, "mb-2 block")}>
             Question text
           </label>
-          <textarea
-            placeholder="Enter the question or blank sentence…"
-            value={draft.text}
-            onChange={(e) => setDraft({ ...draft, text: e.target.value })}
-            rows={2}
-            className={cn(adminInput, "mt-0 mb-5 resize-y")}
-          />
+          <div className="mb-5">
+            <AdminInlineRichTextEditor
+              placeholder="Enter the question or blank sentence…"
+              value={draft.text}
+              onChange={(next) => setDraft({ ...draft, text: next })}
+              rows={2}
+            />
+          </div>
 
           {isOptionType(draft.type) && !isListeningMatchingType(draft.type) && (
             <>
@@ -1181,6 +1208,10 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
           {questions.map((q, i) => (
             <div
               key={q.localId}
+              draggable
+              onDragStart={() => setDragFrom(i)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => onDropReorder(i)}
               className="rounded-[13px] border border-[#EAEEF3] transition-colors hover:border-[#D5DCE6]"
             >
               <div
@@ -1193,6 +1224,9 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
                 }
               >
                 <div className="flex min-w-0 items-center gap-3">
+                  <span className="shrink-0 text-[#B7C1CF]">
+                    <GripVertical className="size-4" />
+                  </span>
                   <span className="shrink-0 rounded-[7px] bg-cyan-soft px-2 py-1 font-mono text-xs font-semibold text-teal">
                     Q{i + 1}
                   </span>
@@ -1200,8 +1234,8 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
                     <p className="font-mono text-[11px] uppercase tracking-wider text-[#94A3B8]">
                       {q.type}
                     </p>
-                    <p className="truncate text-sm font-semibold text-navy">
-                      {q.text || "(no question text)"}
+                    <p className="truncate text-sm font-normal text-navy">
+                      {richHtmlToPlainText(q.text) || "(no question text)"}
                     </p>
                   </div>
                 </div>
@@ -1238,9 +1272,13 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
               </div>
               {expanded[q.localId] && (
                 <div className="border-t border-[#F1F4F8] px-4 py-3">
-                  <p className="mb-2 text-sm text-[#28374E]">
-                    {q.text || "(no question text)"}
-                  </p>
+                  <div className="mb-2 text-sm font-normal text-[#28374E]">
+                    {q.text ? (
+                      <AdminRichTextPreview value={q.text} className="border-0 bg-transparent p-0" />
+                    ) : (
+                      "(no question text)"
+                    )}
+                  </div>
                   <p className="text-[13px] text-[#5A6B82]">
                     {correctSummary(q)}
                   </p>

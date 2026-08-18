@@ -934,3 +934,48 @@ html {
     transform: none;
   }
 }
+
+.admin-rich-editor.ProseMirror {
+  font-weight: 400;
+}
+
+.admin-rich-editor.ProseMirror u,
+.admin-rich-editor.ProseMirror ins {
+  text-decoration: underline;
+}
+
+.admin-rich-editor.ProseMirror em,
+.admin-rich-editor.ProseMirror i {
+  font-style: italic;
+}
+
+.admin-rich-editor.ProseMirror strong,
+.admin-rich-editor.ProseMirror b {
+  font-weight: 700;
+}
+
+.admin-rich-html {
+  font-weight: 400;
+}
+
+.admin-rich-html p {
+  margin: 0 0 0.75em;
+}
+
+.admin-rich-html p:last-child {
+  margin-bottom: 0;
+}
+
+.admin-rich-html strong,
+.admin-rich-html b {
+  font-weight: 700;
+}
+
+.admin-rich-html em,
+.admin-rich-html i {
+  font-style: italic;
+}
+
+.admin-rich-html u {
+  text-decoration: underline;
+}

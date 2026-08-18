@@ -5,8 +5,6 @@ import {
   adminBtnPrimary,
   adminBtnSecondary,
   adminCard,
-  adminFilterPill,
-  adminFilterPillActive,
   adminHeading,
   adminInput,
   adminMutedLabel,
@@ -22,14 +20,7 @@ const SKILLS = [
   { value: "speaking", label: "Speaking", hint: "Name · prompts · clips" },
 ] as const;
 
-const DIFFICULTIES = [
-  { value: "easy", label: "Easy" },
-  { value: "medium", label: "Medium" },
-  { value: "hard", label: "Hard" },
-] as const;
-
 type Skill = (typeof SKILLS)[number]["value"];
-type Difficulty = (typeof DIFFICULTIES)[number]["value"];
 
 type Props = {
   initialSkill: string;
@@ -51,7 +42,6 @@ export function AdminCreateQuestionBankSetForm({
   const [skill, setSkill] = useState<Skill>(normalizeSkill(initialSkill));
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -70,7 +60,7 @@ export function AdminCreateQuestionBankSetForm({
         title: title.trim(),
         description: description.trim() || undefined,
         status: "draft",
-        difficulty,
+        difficulty: "medium",
       });
       onCreated({ set_id: String(created.set_id), skill: created.skill });
     } catch (e) {
@@ -135,42 +125,6 @@ export function AdminCreateQuestionBankSetForm({
             autoFocus
           />
         </div>
-
-        <fieldset>
-          <legend className={adminMutedLabel}>Difficulty</legend>
-          <p className={cn(adminSubtext, "mt-1 mb-2 text-[12.5px]")}>
-            Used when ordering personalized-plan hubs (easy → medium → hard).
-          </p>
-          <div
-            className="flex flex-wrap gap-2"
-            role="radiogroup"
-            aria-label="Difficulty"
-          >
-            {DIFFICULTIES.map((d) => {
-              const active = difficulty === d.value;
-              return (
-                <label
-                  key={d.value}
-                  className={cn(
-                    adminFilterPill,
-                    "cursor-pointer gap-2",
-                    active && adminFilterPillActive,
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="qb-set-difficulty"
-                    value={d.value}
-                    checked={active}
-                    onChange={() => setDifficulty(d.value)}
-                    className="size-3.5 accent-navy"
-                  />
-                  {d.label}
-                </label>
-              );
-            })}
-          </div>
-        </fieldset>
 
         <div>
           <label htmlFor="qb-set-description" className={adminMutedLabel}>

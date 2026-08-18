@@ -101,6 +101,7 @@ export function AdminVideosClient() {
   );
   const [busyTag, setBusyTag] = useState<StreamVideoTag | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [dragOverAdvanced, setDragOverAdvanced] = useState(false);
   const persistedReadyRef = useRef<Set<string>>(new Set());
 
   const assignedCount = TAG_OPTIONS.filter((opt) =>
@@ -742,7 +743,27 @@ export function AdminVideosClient() {
             <span className="hidden font-mono text-xs text-[#5A6B82] group-open:inline">Hide</span>
           </div>
         </summary>
-        <div className="space-y-6 border-t border-[#EDF1F6] px-4 py-5 sm:px-6">
+        <div
+          className={cn(
+            "space-y-6 border-t border-[#EDF1F6] px-4 py-5 transition-colors sm:px-6",
+            dragOverAdvanced && "bg-[#F5FBFD]",
+          )}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!busy) setDragOverAdvanced(true);
+          }}
+          onDragLeave={() => setDragOverAdvanced(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOverAdvanced(false);
+            if (busy) return;
+            const next = e.dataTransfer.files?.[0] ?? null;
+            if (!next) return;
+            setFile(next);
+            setSuccess("Local file selected from drop. Use Upload in the Upload section.");
+            setError(null);
+          }}
+        >
           <form
             className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
             onSubmit={(e) => {
@@ -791,6 +812,9 @@ export function AdminVideosClient() {
               {attaching ? "Assigning…" : "Assign UID"}
             </button>
           </form>
+          <p className={cn(adminMeta, "-mt-2")}>
+            You can also drop a local file here to prepare it for Upload.
+          </p>
         </div>
       </details>
 

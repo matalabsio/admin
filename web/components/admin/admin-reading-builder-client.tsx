@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
+  GripVertical,
   Pencil,
   Plus,
   Trash2,
@@ -33,6 +34,12 @@ import {
 } from "@/components/admin/admin-ui";
 import { cn } from "@/lib/utils";
 import { AdminMatchingGroupEditor } from "@/components/admin/admin-matching-group-editor";
+import { AdminInlineRichTextEditor } from "@/components/admin/admin-inline-rich-text-editor";
+import { AdminRichTextPreview } from "@/components/admin/admin-rich-text-preview";
+import {
+  hasRichTextContent,
+  richHtmlToPlainText,
+} from "@/lib/rich-text-html";
 import {
   defaultMatchingGroup,
   findConsecutiveTypeRange,
@@ -295,6 +302,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [mockTitle, setMockTitle] = useState<string>("");
   const [passageCount, setPassageCount] = useState(3);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
 
   const sourceId = source.kind === "mock" ? source.mockId : source.setId;
 
@@ -363,7 +371,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
 
   /* Word count */
   const wordCount = useMemo(() => {
-    const t = passageText.trim();
+    const t = richHtmlToPlainText(passageText);
     return t ? t.split(/\s+/).length : 0;
   }, [passageText]);
 
@@ -484,7 +492,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
 
   function saveDraft() {
     if (!draft) return;
-    if (!draft.text.trim()) {
+    if (!hasRichTextContent(draft.text)) {
       setError("Question text is required.");
       return;
     }
@@ -507,7 +515,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
     const record: LocalQuestion = {
       localId: editingId || uid(),
       type: draft.type,
-      text: draft.text.trim(),
+      text: draft.text,
       options: isOptionType(draft.type) ? draft.options : null,
       answer: isTextType(draft.type) ? draft.answer.trim() : "",
       altAnswers: isTextType(draft.type)
@@ -534,6 +542,20 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
 
   function toggleExpand(localId: string) {
     setExpanded((prev) => ({ ...prev, [localId]: !prev[localId] }));
+  }
+
+  function onDropReorder(toIndex: number) {
+    if (dragFrom == null || dragFrom === toIndex) {
+      setDragFrom(null);
+      return;
+    }
+    setQuestions((prev) => {
+      const copy = [...prev];
+      const [item] = copy.splice(dragFrom, 1);
+      copy.splice(toIndex, 0, item);
+      return copy;
+    });
+    setDragFrom(null);
   }
 
   /* Draft option helpers */
@@ -606,7 +628,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
 
   /* Save all — bulk replace (matches design sticky Save; persists passage + questions atomically) */
   async function handleSaveAll() {
-    if (!passageText.trim()) {
+    if (!hasRichTextContent(passageText)) {
       setError("Passage text is required.");
       return;
     }
@@ -615,7 +637,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
       return;
     }
     const incomplete = questions.findIndex((q) => {
-      if (!q.text.trim()) return true;
+      if (!hasRichTextContent(q.text)) return true;
       if (isOptionType(q.type)) {
         return !q.options?.some((o) => o.correct);
       }
@@ -672,6 +694,9 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
     );
   }
 
+  const draftFieldClass =
+    "mt-0 h-11 rounded-xl border-[#D5DCE6] bg-white px-3.5 text-[14px] text-navy placeholder:text-[#94A3B8] focus:border-cyan focus:ring-cyan/20";
+
   /* ---------------------------------------------------------------- */
   /*  Preview mode                                                     */
   /* ---------------------------------------------------------------- */
@@ -700,8 +725,12 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
           <span className="mb-4 inline-block rounded-full bg-[#EEF1F5] px-3 py-1 font-mono text-[10px] font-medium uppercase tracking-wider text-[#64748B]">
             Student preview
           </span>
-          <div className="mb-8 whitespace-pre-wrap text-[15px] leading-relaxed font-light text-[#28374E]">
-            {passageText || "(no passage added yet)"}
+          <div className="mb-8 text-[15px] leading-relaxed font-normal text-[#28374E]">
+            {passageText ? (
+              <AdminRichTextPreview value={passageText} className="border-0 bg-transparent p-0" />
+            ) : (
+              "(no passage added yet)"
+            )}
           </div>
           {questions.length === 0 && (
             <p className="text-sm text-[#94A3B8]">No questions added yet.</p>
@@ -714,9 +743,13 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
               <p className="mb-1.5 font-mono text-xs text-[#94A3B8]">
                 Q{i + 1} · {q.type}
               </p>
-              <p className="mb-3 text-[15px] font-semibold text-navy">
-                {q.text || "(no question text)"}
-              </p>
+              <div className="mb-3 text-[15px] font-normal text-navy">
+                {q.text ? (
+                  <AdminRichTextPreview value={q.text} className="border-0 bg-transparent p-0" />
+                ) : (
+                  "(no question text)"
+                )}
+              </div>
               {isOptionType(q.type) && q.options && (
                 <div className="flex flex-col gap-2">
                   {q.options.map((o) => (
@@ -783,7 +816,13 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
       <PassageTabs source={source} part={part} passageCount={passageCount} />
 
       {source.kind === "bank" ? (
-        <AdminSetWatchVideoCard setId={source.setId} className="mt-5" />
+        <div className="mt-5 space-y-3">
+          <AdminSetWatchVideoCard setId={source.setId} />
+          <p className="rounded-xl border border-[#E5ECF4] bg-[#F8FBFF] px-4 py-2.5 text-[12.5px] text-[#5A6B82]">
+            Passage input format: first line is the heading/title, and the remaining
+            lines are the paragraph content.
+          </p>
+        </div>
       ) : null}
 
       {error && (
@@ -814,15 +853,11 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
             {wordCount} {wordCount === 1 ? "word" : "words"}
           </span>
         </div>
-        <textarea
+        <AdminInlineRichTextEditor
           placeholder="Paste or type the reading passage here…"
           value={passageText}
-          onChange={(e) => setPassageText(e.target.value)}
+          onChange={setPassageText}
           rows={10}
-          className={cn(
-            adminInput,
-            "mt-0 resize-y text-[14.5px] leading-relaxed font-light",
-          )}
         />
       </div>
 
@@ -886,33 +921,16 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
           </div>
 
           <label className={cn(adminMutedLabel, "mb-2 block")}>
-            Difficulty
-          </label>
-          <select
-            value={draft.difficulty}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                difficulty: e.target.value as "easy" | "medium" | "hard",
-              })
-            }
-            className={cn(adminInput, "mt-0 mb-5 max-w-[200px]")}
-          >
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-          </select>
-
-          <label className={cn(adminMutedLabel, "mb-2 block")}>
             Question text
           </label>
-          <textarea
-            placeholder="Enter the question or blank sentence…"
-            value={draft.text}
-            onChange={(e) => setDraft({ ...draft, text: e.target.value })}
-            rows={2}
-            className={cn(adminInput, "mt-0 mb-5 resize-y")}
-          />
+          <div className="mb-5">
+            <AdminInlineRichTextEditor
+              placeholder="Enter the question or blank sentence…"
+              value={draft.text}
+              onChange={(next) => setDraft({ ...draft, text: next })}
+              rows={2}
+            />
+          </div>
 
           {/* Option-based types */}
           {isOptionType(draft.type) && !isReadingMatchingType(draft.type) && (
@@ -952,8 +970,9 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
                       disabled={o.locked}
                       className={cn(
                         adminInput,
-                        "mt-0 flex-1",
-                        o.locked && "bg-[#F1F4F8]",
+                        draftFieldClass,
+                        "flex-1",
+                        o.locked && "bg-[#F4F7FB] text-[#64748B]",
                       )}
                     />
                     {!hasFixedOptions(draft.type) && (
@@ -982,7 +1001,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
                 placeholder="Correct answer…"
                 value={draft.answer}
                 onChange={(e) => setDraft({ ...draft, answer: e.target.value })}
-                className={cn(adminInput, "mt-0 mb-4")}
+                className={cn(adminInput, draftFieldClass, "mb-4")}
               />
               <div className="mb-2.5 flex items-center justify-between">
                 <span className={adminMutedLabel}>
@@ -1004,7 +1023,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
                       placeholder="Alternate answer…"
                       value={a.value}
                       onChange={(e) => updateAlt(a.id, e.target.value)}
-                      className={cn(adminInput, "mt-0 flex-1")}
+                      className={cn(adminInput, draftFieldClass, "flex-1")}
                     />
                     <button
                       type="button"
@@ -1050,6 +1069,10 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
           {questions.map((q, i) => (
             <div
               key={q.localId}
+              draggable
+              onDragStart={() => setDragFrom(i)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => onDropReorder(i)}
               className="rounded-[13px] border border-[#EAEEF3] transition-colors hover:border-[#D5DCE6]"
             >
               <div
@@ -1057,6 +1080,9 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
                 onClick={() => toggleExpand(q.localId)}
               >
                 <div className="flex min-w-0 items-center gap-3">
+                  <span className="shrink-0 text-[#B7C1CF]">
+                    <GripVertical className="size-4" />
+                  </span>
                   <span className="shrink-0 rounded-[7px] bg-cyan-soft px-2 py-1 font-mono text-xs font-semibold text-teal">
                     Q{i + 1}
                   </span>
@@ -1064,8 +1090,8 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
                     <p className="font-mono text-[11px] uppercase tracking-wider text-[#94A3B8]">
                       {q.type}
                     </p>
-                    <p className="truncate text-sm font-semibold text-navy">
-                      {q.text || "(no question text)"}
+                    <p className="truncate text-sm font-normal text-navy">
+                      {richHtmlToPlainText(q.text) || "(no question text)"}
                     </p>
                   </div>
                 </div>
@@ -1100,9 +1126,13 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
               </div>
               {expanded[q.localId] && (
                 <div className="border-t border-[#F1F4F8] px-4 py-3">
-                  <p className="mb-2 text-sm text-[#28374E]">
-                    {q.text || "(no question text)"}
-                  </p>
+                  <div className="mb-2 text-sm font-normal text-[#28374E]">
+                    {q.text ? (
+                      <AdminRichTextPreview value={q.text} className="border-0 bg-transparent p-0" />
+                    ) : (
+                      "(no question text)"
+                    )}
+                  </div>
                   <p className="text-[13px] text-[#5A6B82]">
                     {correctSummary(q)}
                   </p>

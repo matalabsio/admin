@@ -30,6 +30,7 @@ import {
   adminMutedLabel,
 } from "@/components/admin/admin-ui";
 import { cn } from "@/lib/utils";
+import { AdminInlineRichTextEditor } from "@/components/admin/admin-inline-rich-text-editor";
 
 type Props = {
   draft: MatchingGroupDraft;
@@ -275,32 +276,17 @@ export function AdminMatchingGroupEditor({
         </button>
       </div>
 
-      <label className={cn(adminMutedLabel, "mb-2 block")}>Difficulty</label>
-      <select
-        value={draft.difficulty}
-        onChange={(e) =>
-          onChange({
-            ...draft,
-            difficulty: e.target.value as MatchingGroupDraft["difficulty"],
-          })
-        }
-        className={cn(adminInput, "mt-0 mb-5 max-w-[200px]")}
-      >
-        <option value="easy">Easy</option>
-        <option value="medium">Medium</option>
-        <option value="hard">Hard</option>
-      </select>
-
       <label className={cn(adminMutedLabel, "mb-2 block")}>
         Instruction (optional)
       </label>
-      <textarea
-        placeholder="Choose the correct heading from the list…"
-        value={draft.instruction}
-        onChange={(e) => onChange({ ...draft, instruction: e.target.value })}
-        rows={2}
-        className={cn(adminInput, "mt-0 mb-5 resize-y")}
-      />
+      <div className="mb-5">
+        <AdminInlineRichTextEditor
+          placeholder="Choose the correct heading from the list…"
+          value={draft.instruction}
+          onChange={(next) => onChange({ ...draft, instruction: next })}
+          rows={2}
+        />
+      </div>
 
       <div className="mb-2.5 flex items-center justify-between">
         <span className={adminMutedLabel}>{poolTitle} — edit cards, then drag</span>
