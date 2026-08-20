@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import bandforgeLogo from "@/modules/listening/img/logo.png";
+import bandforgeLogo from "@/logo.png";
 import { cn } from "@/lib/utils";
 
 const sizeClass = {
@@ -17,7 +17,7 @@ type BandForgeLogoLinkProps = {
   priority?: boolean;
 };
 
-/** Brand logo — links home by default. */
+/** Brand logo — Group 201 wordmark (`logo.png`, transparent). Links home by default. */
 export function BandForgeLogoLink({
   href = "/",
   size = "md",

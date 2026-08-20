@@ -45,6 +45,22 @@ function partLabel(skill: Skill, part: number): string {
   return part === 1 ? "Speaking" : `Part ${part}`;
 }
 
+function formatCreatedAt(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const date = d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+  const time = d.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${date} · ${time}`;
+}
+
 export function AdminQuestionBankClient({
   initialSkill = "listening",
 }: Props) {
@@ -101,9 +117,7 @@ export function AdminQuestionBankClient({
       Object.fromEntries(
         results.map((r) => [
           r.skill,
-          r.sets
-            .filter((set) => set.status !== "archived")
-            .reduce((sum, set) => sum + set.total_questions, 0),
+          r.sets.filter((set) => set.status !== "archived").length,
         ]),
       ) as Record<Skill, number>,
     );
@@ -185,7 +199,10 @@ export function AdminQuestionBankClient({
       setSets((prev) => prev.filter((s) => s.set_id !== item.set_id));
       setPracticeTotals((prev) => ({
         ...prev,
-        [skill]: Math.max(0, (prev[skill] ?? 0) - item.total_questions),
+        [skill]: Math.max(
+          0,
+          (prev[skill] ?? 0) - (item.status === "archived" ? 0 : 1),
+        ),
       }));
       setPendingDelete(null);
     } catch (e) {
@@ -304,7 +321,7 @@ export function AdminQuestionBankClient({
               <p className="mt-2 font-mono text-[28px] font-medium tabular-nums text-navy">
                 {item.count.toLocaleString()}
               </p>
-              <p className={cn(adminSubtext, "mt-1")}>practice questions</p>
+              <p className={cn(adminSubtext, "mt-1")}>practice sets</p>
             </button>
           );
         })}
@@ -392,6 +409,7 @@ export function AdminQuestionBankClient({
             {setsNewestFirst.map((item) => {
               const open = expandedSetIds[item.set_id] ?? false;
               const isCustom = item.is_custom || item.bank_number === 5;
+              const createdLabel = formatCreatedAt(item.created_at);
               return (
                 <li
                   key={item.set_id}
@@ -430,6 +448,7 @@ export function AdminQuestionBankClient({
                         </span>
                         <span className={cn(adminSubtext, "mt-0.5 block text-[12px]")}>
                           {item.total_questions} questions · {item.status}
+                          {createdLabel ? ` · Created ${createdLabel}` : ""}
                         </span>
                       </span>
                     </button>

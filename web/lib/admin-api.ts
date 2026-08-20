@@ -787,6 +787,21 @@ export type QuestionBankListResponse = {
   sets: QuestionBankSetItem[];
 };
 
+export type QuestionBankDraftQueueItem = {
+  set_id: string;
+  skill: string;
+  title: string;
+  set_number: number;
+  bank_number: number;
+  status: string;
+  hub_id: string | null;
+};
+
+export type QuestionBankDraftQueueResponse = {
+  items: QuestionBankDraftQueueItem[];
+  total: number;
+};
+
 export type QuestionBankCreateSetResponse = {
   set_id: string;
   skill: string;
@@ -1548,6 +1563,12 @@ export const adminApi = {
     );
   },
 
+  listQuestionBankDraftQueue() {
+    return adminCall<QuestionBankDraftQueueResponse>(
+      "/question-bank/draft-queue",
+    );
+  },
+
   createQuestionBankSet(body: {
     skill: string;
     title: string;
@@ -1655,6 +1676,38 @@ export const adminApi = {
       size_bytes: number;
       part: number;
     }>(`/question-bank/sets/${setId}/listening/${part}/audio-status${q}`);
+  },
+
+  bankListeningPlayUrl(setId: string, part: number, audioKey?: string, cacheBust?: number) {
+    const params = new URLSearchParams();
+    if (audioKey) params.set("audio_key", audioKey);
+    if (cacheBust) params.set("v", String(cacheBust));
+    const q = params.toString();
+    return `/api/admin/question-bank/sets/${setId}/listening/${part}/audio-play${q ? `?${q}` : ""}`;
+  },
+
+  mockListeningPlayUrl(mockId: string, part: number, audioKey?: string, cacheBust?: number) {
+    const params = new URLSearchParams();
+    if (audioKey) params.set("audio_key", audioKey);
+    if (cacheBust) params.set("v", String(cacheBust));
+    const q = params.toString();
+    return `/api/admin/mocks/${mockId}/listening/${part}/audio-play${q ? `?${q}` : ""}`;
+  },
+
+  bankWritingImagePlayUrl(setId: string, part: number, imageKey?: string, cacheBust?: number) {
+    const params = new URLSearchParams();
+    if (imageKey) params.set("image_key", imageKey);
+    if (cacheBust) params.set("v", String(cacheBust));
+    const q = params.toString();
+    return `/api/admin/question-bank/sets/${setId}/writing/${part}/image-play${q ? `?${q}` : ""}`;
+  },
+
+  mockWritingImagePlayUrl(mockId: string, part: number, imageKey?: string, cacheBust?: number) {
+    const params = new URLSearchParams();
+    if (imageKey) params.set("image_key", imageKey);
+    if (cacheBust) params.set("v", String(cacheBust));
+    const q = params.toString();
+    return `/api/admin/mocks/${mockId}/writing/${part}/image-play${q ? `?${q}` : ""}`;
   },
 
   createBankWatchVideoDirectUpload(

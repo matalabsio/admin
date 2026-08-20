@@ -28,6 +28,10 @@ import {
   adminMutedLabel,
 } from "@/components/admin/admin-ui";
 import { cn } from "@/lib/utils";
+import {
+  useAutoStudentPreview,
+  useBankDraftReviewNav,
+} from "@/lib/use-bank-draft-review-nav";
 
 type Props = {
   source: BuilderSource;
@@ -63,10 +67,23 @@ export function AdminWritingBuilderClient({
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isBank = source.kind === "bank";
+  const { stickyReviewProps } = useBankDraftReviewNav({
+    enabled: isBank,
+    setId: isBank ? source.setId : "",
+    skill: "writing",
+  });
 
   const promptReady = hasRichTextContent(prompt);
   const completionLabel = promptReady ? "Prompt added" : "No prompt";
-  const displayImageSrc = localPreviewUrl || imagePreviewUrl;
+
+  const r2ImageSrc =
+    imageKey.trim() && !localPreviewUrl
+      ? source.kind === "mock"
+        ? adminApi.mockWritingImagePlayUrl(source.mockId, 1, imageKey.trim())
+        : adminApi.bankWritingImagePlayUrl(source.setId, 1, imageKey.trim())
+      : undefined;
+  const displayImageSrc = localPreviewUrl || r2ImageSrc || imagePreviewUrl;
 
   const backHref = builderBackHref(source);
   const backLabel =
@@ -120,6 +137,13 @@ export function AdminWritingBuilderClient({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const enterPreview = useCallback(() => setPreviewMode(true), []);
+  useAutoStudentPreview({
+    enabled: isBank,
+    loading,
+    onPreview: enterPreview,
+  });
 
   useEffect(() => {
     setPreviewMode(false);
@@ -283,6 +307,7 @@ export function AdminWritingBuilderClient({
           onTogglePreview={() => setPreviewMode(false)}
           onSave={() => void handleSave()}
           saving={saving}
+          {...stickyReviewProps}
         />
       </div>
     );
@@ -379,6 +404,21 @@ export function AdminWritingBuilderClient({
             hint="Drop an image here or click Choose image."
             onFile={(file) => onFileChosen(file)}
           >
+            {displayImageSrc ? (
+              <div className="mb-4 flex flex-col items-center gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  key={displayImageSrc}
+                  src={displayImageSrc}
+                  alt={imageName || "Task 1 preview"}
+                  className="max-h-[320px] w-full rounded-xl border border-[#EAEEF3] bg-white object-contain"
+                />
+                <p className="font-mono text-xs text-[#94A3B8]">
+                  {imageName || "Attached figure"}
+                  {imageKey ? ` · ${imageKey}` : " · local preview"}
+                </p>
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-center gap-3">
               <input
                 ref={fileInputRef}
@@ -419,18 +459,11 @@ export function AdminWritingBuilderClient({
             </div>
           </AdminFileDropZone>
 
-          <p className="mt-3 font-mono text-xs text-[#94A3B8]">
-            {imageName || "No image selected"}
-            {imageKey ? ` · ${imageKey}` : ""}
-          </p>
-
-          {displayImageSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={displayImageSrc}
-              alt={imageName || "Task 1 preview"}
-              className="mt-4 max-h-[320px] rounded-xl border border-[#EAEEF3] object-contain"
-            />
+          {!displayImageSrc ? (
+            <p className="mt-3 font-mono text-xs text-[#94A3B8]">
+              {imageName || "No image selected"}
+              {imageKey ? ` · ${imageKey}` : ""}
+            </p>
           ) : null}
         </div>
       )}
@@ -443,6 +476,7 @@ export function AdminWritingBuilderClient({
         onTogglePreview={() => setPreviewMode(true)}
         onSave={() => void handleSave()}
         saving={saving}
+        {...stickyReviewProps}
       />
     </div>
   );

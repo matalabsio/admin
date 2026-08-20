@@ -35,6 +35,10 @@ import {
   richHtmlToPlainText,
 } from "@/lib/rich-text-html";
 import { cn } from "@/lib/utils";
+import {
+  useAutoStudentPreview,
+  useBankDraftReviewNav,
+} from "@/lib/use-bank-draft-review-nav";
 
 type Props = {
   source: BuilderSource;
@@ -87,6 +91,11 @@ const MOCK_PARTS = [1, 2, 3] as const;
 export function AdminSpeakingBuilderClient({ source, part }: Props) {
   const router = useRouter();
   const isBank = source.kind === "bank";
+  const { stickyReviewProps } = useBankDraftReviewNav({
+    enabled: isBank,
+    setId: isBank ? source.setId : "",
+    skill: "speaking",
+  });
   const parts = isBank ? ([1] as const) : MOCK_PARTS;
   const safePart = isBank ? 1 : part >= 1 && part <= 3 ? part : 1;
 
@@ -349,10 +358,16 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
     [],
   );
 
-  const openPreview = () => {
+  const openPreview = useCallback(() => {
     setPreviewMode(true);
     startPreviewForIndex(0, questions);
-  };
+  }, [questions, startPreviewForIndex]);
+
+  useAutoStudentPreview({
+    enabled: isBank,
+    loading,
+    onPreview: openPreview,
+  });
 
   const closePreview = () => {
     stopPreviewTimer();
@@ -792,6 +807,7 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
         saving={saving}
         previewDisabled={questions.length === 0}
         saveDisabled={!canSave || saving}
+        {...stickyReviewProps}
       />
     </div>
   );
