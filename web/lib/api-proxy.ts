@@ -249,6 +249,7 @@ export async function proxyToBackend(
   const responseContentType = res.headers.get("content-type") ?? "application/json";
   const isBinary =
     responseContentType.startsWith("audio/") ||
+    responseContentType.startsWith("image/") ||
     responseContentType.startsWith("application/octet-stream") ||
     responseContentType.startsWith("text/csv");
 

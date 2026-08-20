@@ -40,6 +40,10 @@ import {
   adminSubtext,
 } from "@/components/admin/admin-ui";
 import { cn } from "@/lib/utils";
+import {
+  useAutoStudentPreview,
+  useBankDraftReviewNav,
+} from "@/lib/use-bank-draft-review-nav";
 import { AdminMatchingGroupEditor } from "@/components/admin/admin-matching-group-editor";
 import { AdminInlineRichTextEditor } from "@/components/admin/admin-inline-rich-text-editor";
 import { AdminRichTextPreview } from "@/components/admin/admin-rich-text-preview";
@@ -247,11 +251,17 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [audioInR2, setAudioInR2] = useState<boolean | null>(null);
+  const [audioSizeBytes, setAudioSizeBytes] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [dragOverAudio, setDragOverAudio] = useState(false);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
 
   const isBank = source.kind === "bank";
+  const { stickyReviewProps } = useBankDraftReviewNav({
+    enabled: isBank,
+    setId: isBank ? source.setId : "",
+    skill: "listening",
+  });
 
   const expectedKey = useMemo(
     () =>
@@ -293,6 +303,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
       const k = (key || expectedKey).trim();
       if (!k) {
         setAudioInR2(null);
+        setAudioSizeBytes(0);
         return false;
       }
       try {
@@ -302,6 +313,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
             : await adminApi.checkBankListeningAudio(source.setId, part, k);
         const ok = Boolean(res.playable ?? res.exists_in_r2);
         setAudioInR2(ok);
+        setAudioSizeBytes(ok ? Number(res.size_bytes || 0) : 0);
         if (ok && res.audio_key) {
           setAudioKey(res.audio_key);
           setAudioName(res.audio_key.split("/").pop() || res.audio_key);
@@ -309,6 +321,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
         return ok;
       } catch {
         setAudioInR2(null);
+        setAudioSizeBytes(0);
         return false;
       }
     },
@@ -348,6 +361,13 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
     void load();
   }, [load]);
 
+  const enterPreview = useCallback(() => setPreviewMode(true), []);
+  useAutoStudentPreview({
+    enabled: isBank,
+    loading,
+    onPreview: enterPreview,
+  });
+
   useEffect(() => {
     setDraftOpen(false);
     setDraft(null);
@@ -362,6 +382,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
     setAudioKey("");
     setAudioName("");
     setAudioInR2(null);
+    setAudioSizeBytes(0);
     if (localPreviewUrl) {
       URL.revokeObjectURL(localPreviewUrl);
       setLocalPreviewUrl(null);
@@ -425,7 +446,14 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
     const a = audioRef.current;
     if (!a) return;
     if (a.paused) {
-      void a.play();
+      void a.play().catch((err: unknown) => {
+        setIsPlaying(false);
+        setError(
+          err instanceof Error
+            ? `Could not play audio: ${err.message}`
+            : "Could not play audio.",
+        );
+      });
       setIsPlaying(true);
     } else {
       a.pause();
@@ -707,7 +735,23 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
     ? `${mockTitle} · Listening`
     : `Part ${part} · Listening`;
 
-  const previewAudioSrc = localPreviewUrl || undefined;
+  const r2PlaySrc =
+    audioInR2 && !localPreviewUrl
+      ? source.kind === "mock"
+        ? adminApi.mockListeningPlayUrl(
+            source.mockId,
+            part,
+            audioKey || expectedKey,
+            audioSizeBytes || undefined,
+          )
+        : adminApi.bankListeningPlayUrl(
+            source.setId,
+            part,
+            audioKey || expectedKey,
+            audioSizeBytes || undefined,
+          )
+      : undefined;
+  const previewAudioSrc = localPreviewUrl || r2PlaySrc;
 
   if (previewMode) {
     return (
@@ -732,14 +776,22 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
           <span className="mb-4 inline-block rounded-full bg-[#EEF1F5] px-3 py-1 font-mono text-[10px] font-medium uppercase tracking-wider text-[#64748B]">
             Student preview
           </span>
-          {previewAudioSrc || audioKey ? (
+          {previewAudioSrc ? (
             <audio
+              key={previewAudioSrc}
               controls
               className="mb-6 w-full max-w-md"
               src={previewAudioSrc}
+              onError={() =>
+                setError("Audio is in R2 but the player could not load it. Try Check R2, then refresh.")
+              }
             >
               <track kind="captions" />
             </audio>
+          ) : audioKey ? (
+            <p className="mb-6 text-sm text-[#94A3B8]">
+              Audio key is saved, but playback is not ready yet. Click Check R2.
+            </p>
           ) : (
             <p className="mb-6 text-sm text-[#94A3B8]">No audio attached yet.</p>
           )}
@@ -797,6 +849,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
           onTogglePreview={() => setPreviewMode(false)}
           onSave={handleSaveAll}
           saving={saving}
+          {...stickyReviewProps}
         />
       </div>
     );
@@ -865,8 +918,16 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
 
           <audio
             ref={audioRef}
+            key={previewAudioSrc || "no-audio"}
             src={previewAudioSrc}
             onEnded={() => setIsPlaying(false)}
+            onError={() => {
+              if (previewAudioSrc && !localPreviewUrl) {
+                setError(
+                  "Audio is marked R2 ready but the player could not load it. Click Check R2, then Play again.",
+                );
+              }
+            }}
             className="hidden"
           >
             <track kind="captions" />
@@ -936,6 +997,17 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
             </button>
           </div>
           <p className={cn(adminMeta, "mt-2")}>Drop an MP3 here or click Choose MP3.</p>
+          {previewAudioSrc ? (
+            <audio
+              key={`visible-${previewAudioSrc}`}
+              controls
+              preload="metadata"
+              className="mt-3 w-full"
+              src={previewAudioSrc}
+            >
+              <track kind="captions" />
+            </audio>
+          ) : null}
           </div>
           <p className={cn(adminMeta, "mt-3")}>
             {audioName || "No file selected"}
@@ -1297,6 +1369,7 @@ export function AdminListeningBuilderClient({ source, part }: Props) {
         onTogglePreview={() => setPreviewMode(true)}
         onSave={handleSaveAll}
         saving={saving}
+        {...stickyReviewProps}
       />
     </div>
   );

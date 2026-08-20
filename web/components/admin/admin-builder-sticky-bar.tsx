@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Eye, Pencil, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Pencil, Save } from "lucide-react";
 import {
   type BuilderSkill,
   type BuilderSource,
@@ -27,6 +27,9 @@ type Props = {
   saving: boolean;
   previewDisabled?: boolean;
   saveDisabled?: boolean;
+  reviewNavLabel?: string | null;
+  prevReviewHref?: string | null;
+  nextReviewHref?: string | null;
 };
 
 export function AdminBuilderStickyBar({
@@ -39,6 +42,9 @@ export function AdminBuilderStickyBar({
   saving,
   previewDisabled = false,
   saveDisabled = false,
+  reviewNavLabel = null,
+  prevReviewHref = null,
+  nextReviewHref = null,
 }: Props) {
   const modules =
     source.kind === "bank"
@@ -82,11 +88,50 @@ export function AdminBuilderStickyBar({
             })}
           </nav>
           <span className="truncate font-mono text-[12px] text-[#7689A0]">
+            {reviewNavLabel ? `${reviewNavLabel} · ` : ""}
             {label}
           </span>
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          {prevReviewHref || nextReviewHref ? (
+            <div className="flex items-center gap-1">
+              {prevReviewHref ? (
+                <Link
+                  href={prevReviewHref}
+                  className="flex items-center gap-1 rounded-[11px] border-[1.5px] border-white/20 px-2.5 py-2 text-sm font-semibold text-white hover:border-white/40 sm:px-3 sm:py-2.5"
+                >
+                  <ChevronLeft className="size-4" />
+                  <span className="hidden sm:inline">Previous</span>
+                </Link>
+              ) : (
+                <span
+                  aria-hidden
+                  className="flex items-center gap-1 rounded-[11px] border-[1.5px] border-white/10 px-2.5 py-2 text-sm font-semibold text-white/30 sm:px-3 sm:py-2.5"
+                >
+                  <ChevronLeft className="size-4" />
+                  <span className="hidden sm:inline">Previous</span>
+                </span>
+              )}
+              {nextReviewHref ? (
+                <Link
+                  href={nextReviewHref}
+                  className="flex items-center gap-1 rounded-[11px] border-[1.5px] border-white/20 px-2.5 py-2 text-sm font-semibold text-white hover:border-white/40 sm:px-3 sm:py-2.5"
+                >
+                  <span className="hidden sm:inline">Next</span>
+                  <ChevronRight className="size-4" />
+                </Link>
+              ) : (
+                <span
+                  aria-hidden
+                  className="flex items-center gap-1 rounded-[11px] border-[1.5px] border-white/10 px-2.5 py-2 text-sm font-semibold text-white/30 sm:px-3 sm:py-2.5"
+                >
+                  <span className="hidden sm:inline">Next</span>
+                  <ChevronRight className="size-4" />
+                </span>
+              )}
+            </div>
+          ) : null}
           <button
             type="button"
             onClick={onTogglePreview}

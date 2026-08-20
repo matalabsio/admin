@@ -17,7 +17,20 @@ export function builderPartHref(
   if (source.kind === "mock") {
     return `/admin/mocks/${source.mockId}/${module}/${part}`;
   }
-  return `/admin/question-bank/${source.skill}/${source.setId}/${part}`;
+  return builderBankHref(source.skill, source.setId, part);
+}
+
+export function builderBankHref(
+  skill: BuilderSkill,
+  setId: string,
+  part: number,
+  opts?: { preview?: boolean },
+): string {
+  const base = `/admin/question-bank/${skill}/${setId}/${part}`;
+  if (opts?.preview) {
+    return `${base}?preview=1`;
+  }
+  return base;
 }
 
 export function builderModuleHref(

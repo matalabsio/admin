@@ -33,6 +33,10 @@ import {
   adminMutedLabel,
 } from "@/components/admin/admin-ui";
 import { cn } from "@/lib/utils";
+import {
+  useAutoStudentPreview,
+  useBankDraftReviewNav,
+} from "@/lib/use-bank-draft-review-nav";
 import { AdminMatchingGroupEditor } from "@/components/admin/admin-matching-group-editor";
 import { AdminInlineRichTextEditor } from "@/components/admin/admin-inline-rich-text-editor";
 import { AdminRichTextPreview } from "@/components/admin/admin-rich-text-preview";
@@ -304,6 +308,13 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
   const [passageCount, setPassageCount] = useState(3);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
 
+  const isBank = source.kind === "bank";
+  const { stickyReviewProps } = useBankDraftReviewNav({
+    enabled: isBank,
+    setId: isBank ? source.setId : "",
+    skill: "reading",
+  });
+
   const sourceId = source.kind === "mock" ? source.mockId : source.setId;
 
   /* Load title + passage count once */
@@ -356,6 +367,13 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const enterPreview = useCallback(() => setPreviewMode(true), []);
+  useAutoStudentPreview({
+    enabled: isBank,
+    loading,
+    onPreview: enterPreview,
+  });
 
   /* Reset draft UI when switching passages */
   useEffect(() => {
@@ -786,6 +804,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
           onTogglePreview={() => setPreviewMode(false)}
           onSave={handleSaveAll}
           saving={saving}
+          {...stickyReviewProps}
         />
       </div>
     );
@@ -1151,6 +1170,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
         onTogglePreview={() => setPreviewMode(true)}
         onSave={handleSaveAll}
         saving={saving}
+        {...stickyReviewProps}
       />
     </div>
   );
