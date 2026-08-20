@@ -738,7 +738,7 @@ export function AdminReadingBuilderClient({ source, part }: Props) {
             </button>
           }
         />
-        <PassageTabs source={source} part={part} passageCount={passageCount} />
+        <PassageTabs source={source} part={part} passageCount={passageCount} preview />
         <div className={cn(adminCard, "mt-6")}>
           <span className="mb-4 inline-block rounded-full bg-[#EEF1F5] px-3 py-1 font-mono text-[10px] font-medium uppercase tracking-wider text-[#64748B]">
             Student preview
@@ -1184,20 +1184,23 @@ function PassageTabs({
   source,
   part,
   passageCount,
+  preview = false,
 }: {
   source: BuilderSource;
   part: number;
   passageCount: number;
+  preview?: boolean;
 }) {
   const count = Math.max(1, Math.min(4, passageCount || 1));
   if (count <= 1) return null;
+  const hrefOpts = preview ? { preview: true as const } : undefined;
   return (
     <div className="mt-5 flex flex-wrap items-center gap-2">
       <span className={adminMutedLabel}>Passages</span>
       {Array.from({ length: count }, (_, i) => i + 1).map((p) => (
         <Link
           key={p}
-          href={builderPartHref(source, "reading", p)}
+          href={builderPartHref(source, "reading", p, hrefOpts)}
           className={cn(
             "rounded-full border-[1.5px] px-3.5 py-1.5 text-[13px] font-semibold transition-all",
             p === part

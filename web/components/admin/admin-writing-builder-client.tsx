@@ -265,7 +265,7 @@ export function AdminWritingBuilderClient({
             </Link>
           }
         />
-        <div className="mt-4 flex items-center justify-between">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <span className="rounded-full bg-[#E6F6F8] px-3 py-1 font-mono text-xs font-semibold text-teal">
             Student preview
           </span>
@@ -278,6 +278,25 @@ export function AdminWritingBuilderClient({
             {completionLabel}
           </span>
         </div>
+
+        {maxTasks > 1 ? (
+          <div className="mt-4 flex gap-2">
+            {Array.from({ length: maxTasks }, (_, i) => i + 1).map((t) => (
+              <Link
+                key={t}
+                href={builderPartHref(source, "writing", t, { preview: true })}
+                className={cn(
+                  "rounded-full border-[1.5px] px-4 py-2 text-sm font-semibold transition-all",
+                  t === safePart
+                    ? "border-cyan bg-[#E6F6F8] text-teal"
+                    : "border-[#E4E9F0] bg-white text-[#5A6B82] hover:border-cyan",
+                )}
+              >
+                Task {t}
+              </Link>
+            ))}
+          </div>
+        ) : null}
 
         <div className={cn(adminCard, "mt-5 space-y-5")}>
           <div>

@@ -439,7 +439,14 @@ export function AdminSpeakingBuilderClient({ source, part }: Props) {
                 key={p}
                 type="button"
                 onClick={() =>
-                  router.push(builderPartHref(source, "speaking", p))
+                  router.push(
+                    builderPartHref(
+                      source,
+                      "speaking",
+                      p,
+                      previewMode ? { preview: true } : undefined,
+                    ),
+                  )
                 }
                 className={cn(
                   "rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
