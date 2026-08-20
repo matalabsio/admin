@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Library, Trash2 } from "lucide-react";
+import { builderBankHref } from "@/components/admin/admin-builder-source";
 import { adminApi, type QuestionBankSetItem } from "@/lib/admin-api";
 import { AdminCreateQuestionBankSetForm } from "@/components/admin/admin-create-question-bank-set-form";
+import { AdminQuestionBankSetPreview } from "@/components/admin/admin-question-bank-set-preview";
 import { AdminConfirmDialog } from "@/components/admin/admin-confirm-dialog";
 import { AdminPageHeader } from "@/components/admin/admin-page-header";
 import {
@@ -76,9 +78,8 @@ export function AdminQuestionBankClient({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [expandedSetIds, setExpandedSetIds] = useState<Record<string, boolean>>(
-    {},
-  );
+  const [expandedSetId, setExpandedSetId] = useState<string | null>(null);
+  const [previewPart, setPreviewPart] = useState(1);
   const [deletingSetId, setDeletingSetId] = useState<string | null>(null);
   const [statusBusyId, setStatusBusyId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -100,7 +101,8 @@ export function AdminQuestionBankClient({
   const selectSkill = (next: Skill) => {
     setSkill(next);
     setShowCreate(false);
-    setExpandedSetIds({});
+    setExpandedSetId(null);
+    setPreviewPart(1);
     syncUrl(next);
   };
 
@@ -179,8 +181,17 @@ export function AdminQuestionBankClient({
     syncUrl(skill);
   };
 
-  const toggleSet = (id: string) => {
-    setExpandedSetIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggleSet = (item: QuestionBankSetItem) => {
+    if (expandedSetId === item.set_id) {
+      setExpandedSetId(null);
+      return;
+    }
+    const firstPart =
+      item.sections.find((sec) => sec.has_content)?.part ??
+      item.sections[0]?.part ??
+      1;
+    setPreviewPart(firstPart);
+    setExpandedSetId(item.set_id);
   };
 
   const requestDeleteCustomSet = (item: QuestionBankSetItem) => {
@@ -340,8 +351,8 @@ export function AdminQuestionBankClient({
               {skillLabel} · Practice sets
             </h2>
             <p className={cn(adminSubtext, "mt-1")}>
-              Reusable sets for personalized plans — newest first. Create a set,
-              upload questions, then publish.
+              Click a set to preview it as a student. Use Edit set to open the
+              builder.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -407,7 +418,7 @@ export function AdminQuestionBankClient({
         ) : (
           <ul className="space-y-3">
             {setsNewestFirst.map((item) => {
-              const open = expandedSetIds[item.set_id] ?? false;
+              const open = expandedSetId === item.set_id;
               const isCustom = item.is_custom || item.bank_number === 5;
               const createdLabel = formatCreatedAt(item.created_at);
               return (
@@ -418,7 +429,7 @@ export function AdminQuestionBankClient({
                   <div className="flex flex-wrap items-center gap-2 px-4 py-3">
                     <button
                       type="button"
-                      onClick={() => toggleSet(item.set_id)}
+                      onClick={() => toggleSet(item)}
                       className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left hover:bg-white/70"
                       aria-expanded={open}
                     >
@@ -493,7 +504,11 @@ export function AdminQuestionBankClient({
                         </button>
                       ) : null}
                       <Link
-                        href={`/admin/question-bank/${skill}/${item.set_id}/1`}
+                        href={builderBankHref(
+                          skill,
+                          item.set_id,
+                          open ? previewPart : 1,
+                        )}
                         className={cn(
                           adminLink,
                           "inline-flex items-center gap-1 text-sm",
@@ -505,24 +520,38 @@ export function AdminQuestionBankClient({
                     </div>
                   </div>
                   {open ? (
-                    <div className="flex flex-wrap gap-2 border-t border-[#EDF1F6] px-4 py-3">
-                      {item.sections.map((sec) => (
-                        <Link
-                          key={sec.part}
-                          href={`/admin/question-bank/${skill}/${item.set_id}/${sec.part}`}
-                          className={cn(
-                            "inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition",
-                            sec.has_content
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                              : "border-border-soft bg-white text-ink/70 hover:bg-ink/[0.03]",
-                          )}
-                        >
-                          {partLabel(skill, sec.part)}
-                          <span className="ml-1.5 text-xs opacity-70">
-                            {sec.question_count}
-                          </span>
-                        </Link>
-                      ))}
+                    <div className="space-y-4 border-t border-[#EDF1F6] px-4 py-4">
+                      {item.sections.length > 1 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {item.sections.map((sec) => (
+                            <button
+                              key={sec.part}
+                              type="button"
+                              onClick={() => setPreviewPart(sec.part)}
+                              className={cn(
+                                "inline-flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition",
+                                previewPart === sec.part
+                                  ? "border-cyan bg-cyan-soft/40 text-teal"
+                                  : sec.has_content
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                    : "border-border-soft bg-white text-ink/70 hover:bg-ink/[0.03]",
+                              )}
+                            >
+                              {partLabel(skill, sec.part)}
+                              <span className="ml-1.5 text-xs opacity-70">
+                                {sec.question_count}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div className="max-h-[70vh] overflow-y-auto pr-1">
+                        <AdminQuestionBankSetPreview
+                          skill={skill}
+                          item={item}
+                          part={previewPart}
+                        />
+                      </div>
                     </div>
                   ) : null}
                 </li>

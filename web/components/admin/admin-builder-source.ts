@@ -13,11 +13,12 @@ export function builderPartHref(
   source: BuilderSource,
   module: BuilderSkill,
   part: number,
+  opts?: { preview?: boolean },
 ): string {
   if (source.kind === "mock") {
     return `/admin/mocks/${source.mockId}/${module}/${part}`;
   }
-  return builderBankHref(source.skill, source.setId, part);
+  return builderBankHref(source.skill, source.setId, part, opts);
 }
 
 export function builderBankHref(

@@ -9,6 +9,10 @@ import {
   RefreshCw,
 } from "lucide-react";
 import {
+  builderBankHref,
+  type BuilderSkill,
+} from "@/components/admin/admin-builder-source";
+import {
   AdminChartCard,
   HorizontalBarChart,
   type ChartSegment,
@@ -341,7 +345,7 @@ export function AdminQuestionBankOverviewClient() {
                 Recent practice sets
               </h3>
               <p className="mt-0.5 text-[12.5px] text-[#94A3B8]">
-                Newest admin uploads — click to open the builder
+                Newest admin uploads — open a skill list to preview as a student
               </p>
             </div>
             <Link href="/admin/question-bank?skill=listening" className={adminLink}>
@@ -362,6 +366,7 @@ export function AdminQuestionBankOverviewClient() {
                     <th className="px-3 py-2 text-left">Skill</th>
                     <th className="px-3 py-2 text-right">Qs</th>
                     <th className="px-3 py-2 text-left">Status</th>
+                    <th className="px-3 py-2 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -370,7 +375,7 @@ export function AdminQuestionBankOverviewClient() {
                       <td className={adminSrTd}>{i + 1}</td>
                       <td className="px-3 py-2.5">
                         <Link
-                          href={`/admin/question-bank/${skill}/${set.set_id}/1`}
+                          href={`/admin/question-bank?skill=${skill}`}
                           className="font-semibold text-navy hover:text-teal"
                         >
                           {set.title}
@@ -386,6 +391,14 @@ export function AdminQuestionBankOverviewClient() {
                         <span className={cn(adminMutedLabel, "uppercase")}>
                           {set.status}
                         </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <Link
+                          href={builderBankHref(skill as BuilderSkill, set.set_id, 1)}
+                          className={adminLink}
+                        >
+                          Edit
+                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -404,7 +417,7 @@ export function AdminQuestionBankOverviewClient() {
                 Empty sets needing content
               </h3>
               <p className="mt-0.5 text-[12.5px] text-[#94A3B8]">
-                Newest first — click to open the builder
+                Newest first — open the skill list to preview, or edit in the builder
               </p>
             </div>
           </div>
@@ -413,7 +426,7 @@ export function AdminQuestionBankOverviewClient() {
               <li key={set.set_id} className="flex items-center justify-between gap-3 py-3">
                 <div className="min-w-0">
                   <Link
-                    href={`/admin/question-bank/${skill}/${set.set_id}/1`}
+                    href={`/admin/question-bank?skill=${skill}`}
                     className="block truncate text-[13.5px] font-semibold text-navy hover:text-teal"
                   >
                     {set.title}
@@ -423,7 +436,7 @@ export function AdminQuestionBankOverviewClient() {
                   </span>
                 </div>
                 <Link
-                  href={`/admin/question-bank/${skill}/${set.set_id}/1`}
+                  href={builderBankHref(skill as BuilderSkill, set.set_id, 1)}
                   className={adminLink}
                 >
                   Edit
