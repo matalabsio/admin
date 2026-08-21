@@ -7,10 +7,14 @@
 # -----------------------------------------------------------------------------
 .env
 .env.*
+.env.local
+.env.*.local
 !.env.example
 !.env*.example
 web/.env
 web/.env.*
+web/.env.local
+web/.env.*.local
 !web/.env.example
 !web/.env*.example
 
@@ -23,6 +27,11 @@ web/.env.*
 *.p12
 *.pfx
 !**/fixtures/**/*.pem
+.envrc
+.direnv/
+*.keystore
+google-services.json
+GoogleService-Info.plist
 
 # -----------------------------------------------------------------------------
 # Python

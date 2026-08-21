@@ -1,5 +1,4 @@
 "use client";
-
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -459,6 +458,15 @@ export function AdminQuestionBankClient({
                         </span>
                         <span className={cn(adminSubtext, "mt-0.5 block text-[12px]")}>
                           {item.total_questions} questions · {item.status}
+                          {skill === "writing" && item.exam_module
+                            ? ` · ${
+                                item.exam_module === "general_training"
+                                  ? "General Training"
+                                  : item.exam_module === "both"
+                                    ? "Both"
+                                    : "Academic"
+                              }`
+                            : ""}
                           {createdLabel ? ` · Created ${createdLabel}` : ""}
                         </span>
                       </span>

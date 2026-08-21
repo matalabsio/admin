@@ -11,12 +11,17 @@ import {
   adminSubtext,
 } from "@/components/admin/admin-ui";
 import { adminApi } from "@/lib/admin-api";
+import {
+  EXAM_MODULE_LABELS,
+  WRITING_EXAM_MODULES,
+  type WritingExamModule,
+} from "@/lib/writing-taxonomy";
 import { cn } from "@/lib/utils";
 
 const SKILLS = [
   { value: "listening", label: "Listening", hint: "Name · video · audio · questions" },
   { value: "reading", label: "Reading", hint: "Name · passage · questions" },
-  { value: "writing", label: "Writing", hint: "Name · prompt · image" },
+  { value: "writing", label: "Writing", hint: "Name · exam module · prompt" },
   { value: "speaking", label: "Speaking", hint: "Name · prompts · clips" },
 ] as const;
 
@@ -42,6 +47,8 @@ export function AdminCreateQuestionBankSetForm({
   const [skill, setSkill] = useState<Skill>(normalizeSkill(initialSkill));
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  // Explicit selection required for Writing — no silent academic default.
+  const [examModule, setExamModule] = useState<WritingExamModule | "">("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -50,6 +57,10 @@ export function AdminCreateQuestionBankSetForm({
   const submit = async () => {
     if (!title.trim()) {
       setError("Name is required.");
+      return;
+    }
+    if (skill === "writing" && !examModule) {
+      setError("Select an Exam Module (Academic, General Training, or Both).");
       return;
     }
     setBusy(true);
@@ -61,6 +72,9 @@ export function AdminCreateQuestionBankSetForm({
         description: description.trim() || undefined,
         status: "draft",
         difficulty: "medium",
+        ...(skill === "writing" && examModule
+          ? { exam_module: examModule }
+          : {}),
       });
       onCreated({ set_id: String(created.set_id), skill: created.skill });
     } catch (e) {
@@ -90,7 +104,10 @@ export function AdminCreateQuestionBankSetForm({
               <button
                 key={s.value}
                 type="button"
-                onClick={() => setSkill(s.value)}
+                onClick={() => {
+                  setSkill(s.value);
+                  if (s.value !== "writing") setExamModule("");
+                }}
                 className={cn(
                   "cursor-pointer rounded-[12px] border px-3 py-3 text-left transition-colors",
                   active
@@ -110,6 +127,42 @@ export function AdminCreateQuestionBankSetForm({
           })}
         </div>
       </div>
+
+      {skill === "writing" ? (
+        <fieldset>
+          <legend className={cn(adminMutedLabel, "mb-2")}>Exam Module</legend>
+          <p className={cn(adminSubtext, "mb-3")}>
+            Required. Both means this set is valid for Academic and General
+            Training — content is not duplicated.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            {WRITING_EXAM_MODULES.map((mod) => {
+              const active = examModule === mod;
+              return (
+                <label
+                  key={mod}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 rounded-[12px] border px-4 py-3 text-sm font-semibold transition-colors",
+                    active
+                      ? "border-cyan bg-cyan-soft/40 text-navy ring-2 ring-cyan/25"
+                      : "border-[#E4E9F0] bg-white text-[#5A6B82] hover:border-cyan/40",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="exam_module"
+                    value={mod}
+                    checked={active}
+                    onChange={() => setExamModule(mod)}
+                    className="accent-cyan"
+                  />
+                  {EXAM_MODULE_LABELS[mod]}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      ) : null}
 
       <div className="space-y-4">
         <div>

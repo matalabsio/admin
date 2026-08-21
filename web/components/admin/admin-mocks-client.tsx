@@ -282,6 +282,20 @@ function MockCard({
             <p className={cn(adminMeta, "font-bold text-teal")}>Test {mock.catalog_number}</p>
           ) : null}
           <h3 className="font-display text-xl font-bold text-navy">{mock.title}</h3>
+          {mock.exam_module ? (
+            <p className={cn(adminMeta, "mt-1")}>
+              Writing ·{" "}
+              {mock.exam_module === "general_training"
+                ? "General Training"
+                : mock.exam_module === "both"
+                  ? "Both"
+                  : "Academic"}
+            </p>
+          ) : (
+            <p className={cn(adminMeta, "mt-1 text-[#94A3B8]")}>
+              Writing · unclassified
+            </p>
+          )}
         </div>
         <span
           className={cn(

@@ -262,6 +262,8 @@ export type AdminMockListItem = {
   is_published: boolean;
   is_free?: boolean;
   catalog_number: number | null;
+  /** Writing-track taxonomy. NULL = unclassified. */
+  exam_module?: "academic" | "general_training" | "both" | null;
   created_at: string;
   total_questions: number;
   attempt_count?: number;
@@ -777,6 +779,8 @@ export type QuestionBankSetItem = {
   description?: string | null;
   status?: string;
   is_custom?: boolean;
+  /** Writing only: academic | general_training | both. ``both`` = both tracks. */
+  exam_module?: "academic" | "general_training" | "both" | null;
   created_at?: string | null;
   sections: QuestionBankSectionSummary[];
   total_questions: number;
@@ -811,6 +815,7 @@ export type QuestionBankCreateSetResponse = {
   bank_number: number;
   set_number: number;
   status: string;
+  exam_module?: "academic" | "general_training" | "both" | null;
 };
 
 export type BankListeningPartResponse = {
@@ -989,6 +994,7 @@ export const adminApi = {
     listening_parts?: number;
     reading_passages?: number;
     writing_tasks?: number;
+    exam_module?: "academic" | "general_training" | "both" | null;
   }) {
     return adminCall<AdminMockListItem>("/mocks", {
       method: "POST",
@@ -1010,6 +1016,7 @@ export const adminApi = {
       reading_passages?: number;
       writing_tasks?: number;
       is_free?: boolean;
+      exam_module?: "academic" | "general_training" | "both" | null;
     },
   ) {
     return adminCall<AdminMockListItem>(`/mocks/${id}`, {
@@ -1575,9 +1582,25 @@ export const adminApi = {
     description?: string | null;
     status?: "draft" | "published" | "archived";
     difficulty?: "easy" | "medium" | "hard";
+    exam_module?: "academic" | "general_training" | "both" | null;
   }) {
     return adminCall<QuestionBankCreateSetResponse>(`/question-bank/sets`, {
       method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  patchQuestionBankSet(
+    setId: string,
+    body: { exam_module: "academic" | "general_training" | "both" },
+  ) {
+    return adminCall<{
+      set_id: string;
+      skill: string;
+      exam_module: "academic" | "general_training" | "both" | null;
+      ok: boolean;
+    }>(`/question-bank/sets/${setId}`, {
+      method: "PATCH",
       body: JSON.stringify(body),
     });
   },
@@ -1788,6 +1811,7 @@ export const adminApi = {
       question_type?: string | null;
       options?: Record<string, unknown> | null;
       image_url?: string | null;
+      exam_module?: "academic" | "general_training" | "both" | null;
     },
   ) {
     return adminCall<{

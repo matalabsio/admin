@@ -8,7 +8,14 @@ import {
   adminHeading,
   adminInput,
   adminMutedLabel,
+  adminSubtext,
 } from "@/components/admin/admin-ui";
+import {
+  EXAM_MODULE_LABELS,
+  WRITING_EXAM_MODULES,
+  isWritingExamModule,
+  type WritingExamModule,
+} from "@/lib/writing-taxonomy";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -28,7 +35,12 @@ export function AdminMockEditForm({ mock, onSaved }: Props) {
   const [readingPassages, setReadingPassages] = useState(
     mock.configured_reading_passages ?? 3,
   );
-  const [writingTasks, setWritingTasks] = useState(mock.configured_writing_tasks ?? 2);
+  const [writingTasks, setWritingTasks] = useState(
+    mock.configured_writing_tasks ?? 2,
+  );
+  const [examModule, setExamModule] = useState<WritingExamModule | "">(
+    isWritingExamModule(mock.exam_module) ? mock.exam_module : "",
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -43,6 +55,7 @@ export function AdminMockEditForm({ mock, onSaved }: Props) {
         listening_parts: listeningParts,
         reading_passages: readingPassages,
         writing_tasks: writingTasks,
+        exam_module: examModule || null,
       });
       onSaved();
     } catch (e) {
@@ -58,7 +71,11 @@ export function AdminMockEditForm({ mock, onSaved }: Props) {
 
       <label className="mt-4 block text-sm font-medium text-black">
         <span className={adminMutedLabel}>Title</span>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} className={adminInput} />
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className={adminInput}
+        />
       </label>
 
       <label className="mt-3 block text-sm font-medium text-black">
@@ -83,6 +100,44 @@ export function AdminMockEditForm({ mock, onSaved }: Props) {
           className={`${adminInput} w-32`}
         />
       </label>
+
+      <fieldset className="mt-4">
+        <legend className={adminMutedLabel}>Exam Module (Writing track)</legend>
+        <p className={cn(adminSubtext, "mt-1 mb-3")}>
+          Tags Academic / General Training / Both for Writing. Unset =
+          unclassified. Runtime access unchanged in this phase.
+        </p>
+        <div
+          className="flex flex-col gap-2 sm:flex-row sm:flex-wrap"
+          role="radiogroup"
+          aria-label="Exam Module"
+        >
+          {WRITING_EXAM_MODULES.map((mod) => {
+            const active = examModule === mod;
+            return (
+              <label
+                key={mod}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-[12px] border px-4 py-3 text-sm font-semibold transition-colors",
+                  active
+                    ? "border-cyan bg-cyan-soft/40 text-navy ring-2 ring-cyan/25"
+                    : "border-[#E4E9F0] bg-white text-[#5A6B82] hover:border-cyan/40",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="mock_edit_exam_module"
+                  value={mod}
+                  checked={active}
+                  onChange={() => setExamModule(mod)}
+                  className="accent-cyan"
+                />
+                {EXAM_MODULE_LABELS[mod]}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <label className="text-sm font-medium text-black">
