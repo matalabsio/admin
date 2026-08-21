@@ -12,6 +12,11 @@ import {
   adminSubtext,
 } from "@/components/admin/admin-ui";
 import { adminApi } from "@/lib/admin-api";
+import {
+  EXAM_MODULE_LABELS,
+  WRITING_EXAM_MODULES,
+  type WritingExamModule,
+} from "@/lib/writing-taxonomy";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -25,6 +30,8 @@ export function AdminCreateMockForm({ onCreated, onCancel }: Props) {
   const [listeningParts, setListeningParts] = useState(4);
   const [readingPassages, setReadingPassages] = useState(3);
   const [writingTasks, setWritingTasks] = useState(2);
+  // Optional Writing-track tag — no silent Academic default.
+  const [examModule, setExamModule] = useState<WritingExamModule | "">("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -42,6 +49,7 @@ export function AdminCreateMockForm({ onCreated, onCancel }: Props) {
         listening_parts: listeningParts,
         reading_passages: readingPassages,
         writing_tasks: writingTasks,
+        ...(examModule ? { exam_module: examModule } : {}),
       });
       onCreated({ id: String(mock.id) });
     } catch (e) {
@@ -58,7 +66,8 @@ export function AdminCreateMockForm({ onCreated, onCancel }: Props) {
         <h2 className={cn(adminHeading, "mt-1 text-xl")}>Full mock test</h2>
         <p className={cn(adminSubtext, "mt-1.5")}>
           Draft with Listening → Reading → Writing. Next catalog slot assigned
-          automatically.
+          automatically. Exam Module tags the Writing track (optional until
+          later selection phases).
         </p>
       </div>
 
@@ -94,6 +103,49 @@ export function AdminCreateMockForm({ onCreated, onCancel }: Props) {
           />
         </div>
       </div>
+
+      <fieldset>
+        <legend className={cn(adminMutedLabel, "mb-2")}>
+          Exam Module{" "}
+          <span className="normal-case tracking-normal text-[#B0BCCB]">
+            (Writing track · optional)
+          </span>
+        </legend>
+        <p className={cn(adminSubtext, "mb-3")}>
+          Academic / General Training / Both for Writing. Leave unset to keep
+          unclassified. Does not change runtime mock access yet.
+        </p>
+        <div
+          className="flex flex-col gap-2 sm:flex-row sm:flex-wrap"
+          role="radiogroup"
+          aria-label="Exam Module"
+        >
+          {WRITING_EXAM_MODULES.map((mod) => {
+            const active = examModule === mod;
+            return (
+              <label
+                key={mod}
+                className={cn(
+                  "flex cursor-pointer items-center gap-2 rounded-[12px] border px-4 py-3 text-sm font-semibold transition-colors",
+                  active
+                    ? "border-cyan bg-cyan-soft/40 text-navy ring-2 ring-cyan/25"
+                    : "border-[#E4E9F0] bg-white text-[#5A6B82] hover:border-cyan/40",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="mock_exam_module"
+                  value={mod}
+                  checked={active}
+                  onChange={() => setExamModule(mod)}
+                  className="accent-cyan"
+                />
+                {EXAM_MODULE_LABELS[mod]}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
 
       <div>
         <p className={cn(adminMutedLabel, "mb-3")}>Test structure</p>

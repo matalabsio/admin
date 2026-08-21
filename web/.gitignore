@@ -1,4 +1,4 @@
-# Nested Next.js ignores (root .gitignore is the source of truth)
+# Nested Next.js ignores (admin/.gitignore is the source of truth)
 node_modules/
 .next/
 out/
@@ -6,9 +6,15 @@ out/
 .vercel/
 .env
 .env.*
+.env.local
+.env.*.local
 !.env.example
 !.env*.example
 *.tsbuildinfo
 next-env.d.ts
 *.log
 .DS_Store
+*.local
+!*.example
+*.secret
+*.secrets

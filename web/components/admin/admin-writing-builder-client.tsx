@@ -23,15 +23,23 @@ import {
   adminBtnSecondary,
   adminCard,
   adminHeading,
-  adminInput,
   adminLink,
   adminMutedLabel,
+  adminSubtext,
 } from "@/components/admin/admin-ui";
 import { cn } from "@/lib/utils";
 import {
   useAutoStudentPreview,
   useBankDraftReviewNav,
 } from "@/lib/use-bank-draft-review-nav";
+import {
+  EXAM_MODULE_LABELS,
+  WRITING_EXAM_MODULES,
+  defaultTask1TypeForExamModule,
+  isWritingExamModule,
+  writingTaxonomyMismatchMessage,
+  type WritingExamModule,
+} from "@/lib/writing-taxonomy";
 
 type Props = {
   source: BuilderSource;
@@ -52,6 +60,7 @@ export function AdminWritingBuilderClient({
   const [questionType, setQuestionType] = useState(
     safePart === 1 ? "task1_academic" : "task2",
   );
+  const [examModule, setExamModule] = useState<WritingExamModule | "">("");
   const [options, setOptions] = useState<Record<string, unknown>>({});
   const [imageKey, setImageKey] = useState("");
   const [imageName, setImageName] = useState("");
@@ -68,6 +77,8 @@ export function AdminWritingBuilderClient({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isBank = source.kind === "bank";
+  const isTask1General = safePart === 1 && questionType === "task1_general";
+  const isTask1Academic = safePart === 1 && questionType === "task1_academic";
   const { stickyReviewProps } = useBankDraftReviewNav({
     enabled: isBank,
     setId: isBank ? source.setId : "",
@@ -98,9 +109,11 @@ export function AdminWritingBuilderClient({
   );
 
   const placeholder =
-    safePart === 1
-      ? "Describe the chart/graph/diagram. Include timing guidance and the minimum word count…"
-      : "Enter the Task 2 essay question…";
+    safePart === 2
+      ? "Enter the Task 2 essay question…"
+      : isTask1General
+        ? "Write a letter. Include purpose, bullet points to cover, and the minimum word count…"
+        : "Describe the chart/graph/diagram. Include timing guidance and the minimum word count…";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -110,10 +123,23 @@ export function AdminWritingBuilderClient({
         source.kind === "mock"
           ? await adminApi.loadWritingPart(source.mockId, safePart)
           : await adminApi.loadBankWritingPart(source.setId, safePart);
+
+      let setExam: WritingExamModule | "" = "";
+      if (source.kind === "bank") {
+        const setMeta = await adminApi.getQuestionBankSet(source.setId);
+        if (isWritingExamModule(setMeta.exam_module)) {
+          setExam = setMeta.exam_module;
+        }
+        setExamModule(setExam);
+      }
+
+      const loadedType =
+        res.question_type ||
+        (safePart === 1
+          ? defaultTask1TypeForExamModule(setExam || null)
+          : "task2");
       setPrompt(res.prompt || "");
-      setQuestionType(
-        res.question_type || (safePart === 1 ? "task1_academic" : "task2"),
-      );
+      setQuestionType(loadedType);
       setOptions(res.options || {});
       setImageKey(res.image_url || "");
       setImageName(
@@ -163,6 +189,26 @@ export function AdminWritingBuilderClient({
     };
   }, [localPreviewUrl]);
 
+  function onExamModuleChange(next: WritingExamModule) {
+    setExamModule(next);
+    if (safePart === 1) {
+      const preferred = defaultTask1TypeForExamModule(next);
+      if (
+        (questionType === "task1_academic" && next === "general_training") ||
+        (questionType === "task1_general" && next === "academic")
+      ) {
+        setQuestionType(preferred);
+      }
+    }
+  }
+
+  function onTask1TypeChange(next: "task1_academic" | "task1_general") {
+    setQuestionType(next);
+    if (next === "task1_general") {
+      removeImage();
+    }
+  }
+
   function onFileChosen(file: File | null) {
     if (!file) return;
     if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
@@ -211,21 +257,36 @@ export function AdminWritingBuilderClient({
       setError("Add a prompt before saving.");
       return;
     }
+    if (isBank) {
+      if (!examModule) {
+        setError("Select an Exam Module before saving.");
+        return;
+      }
+      const mismatch = writingTaxonomyMismatchMessage(questionType, examModule);
+      if (mismatch) {
+        setError(mismatch);
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     setSaveMsg(null);
     try {
-      // Upload pending local file before save if needed
+      // Upload pending local file before save if needed (Academic Task 1 only)
       let key = imageKey.trim();
-      if (safePart === 1 && pendingFile) {
-        const res =
+      if (isTask1Academic && pendingFile) {
+        const uploaded =
           source.kind === "mock"
             ? await adminApi.uploadWritingImage(source.mockId, 1, pendingFile)
-            : await adminApi.uploadBankWritingImage(source.setId, 1, pendingFile);
-        key = res.image_url;
-        setImageKey(res.image_url);
-        setImagePreviewUrl(res.image_preview_url || localPreviewUrl);
-        setImageName(res.image_name || pendingFile.name);
+            : await adminApi.uploadBankWritingImage(
+                source.setId,
+                1,
+                pendingFile,
+              );
+        key = uploaded.image_url;
+        setImageKey(uploaded.image_url);
+        setImagePreviewUrl(uploaded.image_preview_url || localPreviewUrl);
+        setImageName(uploaded.image_name || pendingFile.name);
         setPendingFile(null);
       }
 
@@ -234,7 +295,8 @@ export function AdminWritingBuilderClient({
         question_type: questionType,
         options,
         // Empty string clears Task 1 image; null leaves existing (Task 2)
-        image_url: safePart === 1 ? key : null,
+        image_url: safePart === 1 ? (isTask1General ? "" : key) : null,
+        ...(isBank && examModule ? { exam_module: examModule } : {}),
       };
       const res =
         source.kind === "mock"
@@ -300,12 +362,16 @@ export function AdminWritingBuilderClient({
 
         <div className={cn(adminCard, "mt-5 space-y-5")}>
           <div>
-            <p className={adminMutedLabel}>Task {safePart} prompt</p>
+            <p className={adminMutedLabel}>
+              {isTask1General
+                ? "General Training Task 1 · Letter"
+                : `Task ${safePart} prompt`}
+            </p>
             <p className="mt-2 whitespace-pre-wrap text-[15px] leading-relaxed text-navy">
               {richHtmlToPlainText(prompt) || "(no prompt yet)"}
             </p>
           </div>
-          {safePart === 1 && displayImageSrc ? (
+          {isTask1Academic && displayImageSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={displayImageSrc}
@@ -393,9 +459,99 @@ export function AdminWritingBuilderClient({
         </div>
       )}
 
-      <div className={cn(adminCard, "mt-6")}>
+      {isBank ? (
+        <div className={cn(adminCard, "mt-6")}>
+          <h2 className={cn(adminHeading, "text-[17px]")}>Exam Module</h2>
+          <p className={cn(adminSubtext, "mt-1")}>
+            Explicit classification for the planner. Both = Academic and General
+            Training (not duplicated content).
+          </p>
+          <div
+            className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap"
+            role="radiogroup"
+            aria-label="Exam Module"
+          >
+            {WRITING_EXAM_MODULES.map((mod) => {
+              const active = examModule === mod;
+              return (
+                <label
+                  key={mod}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 rounded-[12px] border px-4 py-3 text-sm font-semibold transition-colors",
+                    active
+                      ? "border-cyan bg-cyan-soft/40 text-navy ring-2 ring-cyan/25"
+                      : "border-[#E4E9F0] bg-white text-[#5A6B82] hover:border-cyan/40",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="writing_exam_module"
+                    value={mod}
+                    checked={active}
+                    onChange={() => onExamModuleChange(mod)}
+                    className="accent-cyan"
+                  />
+                  {EXAM_MODULE_LABELS[mod]}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {safePart === 1 ? (
+        <div className={cn(adminCard, "mt-5")}>
+          <h2 className={cn(adminHeading, "text-[17px]")}>Task 1 type</h2>
+          <div
+            className="mt-4 flex flex-col gap-2 sm:flex-row"
+            role="radiogroup"
+            aria-label="Task 1 type"
+          >
+            <label
+              className={cn(
+                "flex cursor-pointer items-center gap-2 rounded-[12px] border px-4 py-3 text-sm font-semibold transition-colors",
+                isTask1Academic
+                  ? "border-cyan bg-cyan-soft/40 text-navy ring-2 ring-cyan/25"
+                  : "border-[#E4E9F0] bg-white text-[#5A6B82] hover:border-cyan/40",
+              )}
+            >
+              <input
+                type="radio"
+                name="task1_type"
+                value="task1_academic"
+                checked={isTask1Academic}
+                onChange={() => onTask1TypeChange("task1_academic")}
+                className="accent-cyan"
+              />
+              Academic Task 1
+            </label>
+            <label
+              className={cn(
+                "flex cursor-pointer items-center gap-2 rounded-[12px] border px-4 py-3 text-sm font-semibold transition-colors",
+                isTask1General
+                  ? "border-cyan bg-cyan-soft/40 text-navy ring-2 ring-cyan/25"
+                  : "border-[#E4E9F0] bg-white text-[#5A6B82] hover:border-cyan/40",
+              )}
+            >
+              <input
+                type="radio"
+                name="task1_type"
+                value="task1_general"
+                checked={isTask1General}
+                onChange={() => onTask1TypeChange("task1_general")}
+                className="accent-cyan"
+              />
+              General Training Task 1 · Letter
+            </label>
+          </div>
+        </div>
+      ) : null}
+
+      <div className={cn(adminCard, "mt-5")}>
         <h2 className={cn(adminHeading, "text-[17px]")}>
-          Task {safePart} prompt
+          {isTask1General
+            ? "General Training Task 1 · Letter"
+            : `Task ${safePart} prompt`}
         </h2>
         <div className="mt-3">
           <AdminInlineRichTextEditor
@@ -407,14 +563,14 @@ export function AdminWritingBuilderClient({
         </div>
       </div>
 
-      {safePart === 1 && (
+      {isTask1Academic && (
         <div className={cn(adminCard, "mt-5")}>
           <h2 className={cn(adminHeading, "text-[17px]")}>
             Chart / graph / diagram
           </h2>
           <p className="mt-1 text-sm text-[#5A6B82]">
-            Optional image for Task 1. Upload to R2, then Save to attach it to
-            the question.
+            Optional image for Academic Task 1. Upload to R2, then Save to
+            attach it to the question.
           </p>
 
           <AdminFileDropZone
@@ -486,6 +642,16 @@ export function AdminWritingBuilderClient({
           ) : null}
         </div>
       )}
+
+      {isTask1General ? (
+        <div className={cn(adminCard, "mt-5")}>
+          <h2 className={cn(adminHeading, "text-[17px]")}>Letter</h2>
+          <p className={cn(adminSubtext, "mt-1")}>
+            General Training Task 1 is a letter prompt. No chart or diagram is
+            required.
+          </p>
+        </div>
+      ) : null}
 
       <AdminBuilderStickyBar
         source={source}
